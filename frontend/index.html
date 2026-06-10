@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mise — Essensplaner</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/recipes" class="brand">
+      <span class="brand-mark">▦</span>
+      <span class="brand-name">Mise</span>
+    </a>
+    <nav class="nav" id="nav">
+      <a href="#/recipes" data-route="recipes">Rezepte</a>
+      <a href="#/plan" data-route="plan">Wochenplan <span class="badge" id="plan-badge" hidden>0</span></a>
+      <a href="#/shopping" data-route="shopping">Einkaufsliste</a>
+      <a href="#/prep" data-route="prep">Vorbereitung</a>
+    </nav>
+  </header>
+
+  <main id="app" class="container">
+    <!-- Views werden hier von js/app.js gerendert -->
+  </main>
+
+  <!-- Gemeinsame Datalists fuer Autovervollstaendigung im Editor -->
+  <datalist id="dl-units">
+    <option value="g"></option><option value="kg"></option>
+    <option value="ml"></option><option value="l"></option>
+    <option value="Stueck"></option><option value="EL"></option>
+    <option value="TL"></option><option value="Prise"></option>
+    <option value="Bund"></option><option value="Dose"></option>
+    <option value="Zehe"></option><option value="Scheibe"></option>
+    <option value="cm"></option>
+  </datalist>
+  <datalist id="dl-preps">
+    <option value="wuerfeln"></option><option value="fein wuerfeln"></option>
+    <option value="hacken"></option><option value="fein hacken"></option>
+    <option value="in Scheiben schneiden"></option><option value="in Streifen schneiden"></option>
+    <option value="in Stifte schneiden"></option><option value="in Ringe schneiden"></option>
+    <option value="in Spalten schneiden"></option><option value="in Roeschen teilen"></option>
+    <option value="reiben"></option><option value="schaelen"></option>
+    <option value="waschen"></option><option value="halbieren"></option>
+    <option value="zupfen"></option><option value="auspressen"></option>
+    <option value="abtropfen"></option>
+  </datalist>
+  <datalist id="dl-ingredients"></datalist>
+
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>
