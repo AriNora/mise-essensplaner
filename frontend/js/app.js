@@ -20,6 +20,18 @@ const PAGE_SIZE = 50;
 const DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 const DAY_NAMES = { Mo: "Montag", Di: "Dienstag", Mi: "Mittwoch", Do: "Donnerstag", Fr: "Freitag", Sa: "Samstag", So: "Sonntag" };
 
+// Facetten des Tag-Systems (Reihenfolge = Anzeigereihenfolge).
+const KIND_ORDER = ["typ", "kueche", "eigenschaft"];
+const KIND_LABELS = { typ: "Gericht-Typ", kueche: "Küche", eigenschaft: "Eigenschaft" };
+// Kontrolliertes Vokabular fuer den Editor (Filterleiste zeigt nur benutzte Tags).
+const TAG_VOCAB = {
+  typ: ["Hauptgericht", "Suppe", "Eintopf", "Pasta", "Bowl", "Curry", "Salat",
+        "Frühstück", "Dessert", "Snack", "Beilage", "Aufstrich/Dip", "Getränk"],
+  kueche: ["Italienisch", "Indisch", "Thai", "Mexikanisch", "Griechisch", "Japanisch",
+           "Koreanisch", "Chinesisch", "Asiatisch", "Orientalisch"],
+  eigenschaft: ["schnell", "One-Pot", "Meal-Prep", "proteinreich", "glutenfrei", "budgetfreundlich"],
+};
+
 /* ----------------------------- Helfer ----------------------------- */
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) =>
@@ -60,7 +72,79 @@ async function refreshPlanBadge() {
 const go = (hash) => { location.hash = hash; };
 
 /* --------------------------- Rezeptliste --------------------------- */
-const listState = { search: "", offset: 0 };
+const listState = { search: "", offset: 0, facets: { typ: [], kueche: [], eigenschaft: [] } };
+const HASH_PARAM = { typ: "typ", kueche: "kueche", eigenschaft: "eig" }; // Facette -> Hash-Schluessel
+
+// Filter + Suche in den URL-Hash schreiben: teilbar, bleibt beim Neuladen erhalten.
+function buildRecipesHash() {
+  const p = new URLSearchParams();
+  if (listState.search) p.set("q", listState.search);
+  for (const k of KIND_ORDER) if (listState.facets[k].length) p.set(HASH_PARAM[k], listState.facets[k].join(","));
+  const qs = p.toString();
+  return "#/recipes" + (qs ? "?" + qs : "");
+}
+
+// Hash aktualisieren OHNE erneutes Routing (replaceState loest kein hashchange aus).
+function syncHash() {
+  history.replaceState(null, "", buildRecipesHash());
+}
+
+// Hash -> Filter-Zustand (beim Betreten der Liste, auch ueber geteilten Link).
+function applyRecipesQuery(queryStr) {
+  const p = new URLSearchParams(queryStr || "");
+  listState.search = p.get("q") || "";
+  listState.offset = 0;
+  for (const k of KIND_ORDER) {
+    const v = p.get(HASH_PARAM[k]) || "";
+    listState.facets[k] = v ? v.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  }
+}
+
+const anyFacetActive = () => KIND_ORDER.some((k) => listState.facets[k].length);
+
+// Filterleiste aus den benutzten Tags (mit Trefferzahl) aufbauen.
+function renderFilters(tags) {
+  const wrap = document.getElementById("filters");
+  if (!wrap) return;
+  const byKind = { typ: [], kueche: [], eigenschaft: [] };
+  for (const t of tags) if (byKind[t.kind]) byKind[t.kind].push(t);
+
+  let html = "";
+  for (const k of KIND_ORDER) {
+    if (!byKind[k].length) continue;
+    const chips = byKind[k].map((t) => {
+      const active = listState.facets[k].includes(t.name);
+      return `<button class="chip${active ? " active" : ""}" data-kind="${k}" data-name="${esc(t.name)}">${esc(t.name)}<span class="chip-count">${t.count}</span></button>`;
+    }).join("");
+    html += `<div class="filter-facet"><span class="filter-label">${esc(KIND_LABELS[k])}</span><div class="chips">${chips}</div></div>`;
+  }
+  if (!html) { wrap.innerHTML = ""; return; } // noch keine Tags vergeben
+  html += `<button class="filter-reset" id="filter-reset" ${anyFacetActive() ? "" : "hidden"}>Filter zurücksetzen</button>`;
+  wrap.innerHTML = html;
+
+  wrap.querySelectorAll(".chip").forEach((btn) => {
+    btn.onclick = () => {
+      const { kind, name } = btn.dataset;
+      const arr = listState.facets[kind];
+      const i = arr.indexOf(name);
+      if (i === -1) arr.push(name); else arr.splice(i, 1);
+      btn.classList.toggle("active");
+      listState.offset = 0;
+      syncHash();
+      document.getElementById("filter-reset").hidden = !anyFacetActive();
+      loadList();
+    };
+  });
+  const reset = document.getElementById("filter-reset");
+  if (reset) reset.onclick = () => {
+    for (const k of KIND_ORDER) listState.facets[k] = [];
+    listState.offset = 0;
+    syncHash();
+    wrap.querySelectorAll(".chip.active").forEach((c) => c.classList.remove("active"));
+    reset.hidden = true;
+    loadList();
+  };
+}
 
 async function viewRecipes() {
   setActiveNav("recipes");
@@ -77,6 +161,7 @@ async function viewRecipes() {
     </div>
     <input class="search" id="search" type="search" placeholder="Rezept suchen …"
            value="${esc(listState.search)}" autocomplete="off" />
+    <div class="filters" id="filters"></div>
     <ul class="recipe-list" id="recipe-list"></ul>
     <div class="pager" id="pager"></div>
   `;
@@ -87,20 +172,24 @@ async function viewRecipes() {
   let timer;
   search.oninput = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => { listState.search = search.value; listState.offset = 0; loadList(); }, 200);
+    timer = setTimeout(() => { listState.search = search.value; listState.offset = 0; syncHash(); loadList(); }, 200);
   };
+
+  // Filterleiste aus den vorhandenen Tags aufbauen (parallel zur Liste).
+  api.listTags().then((data) => renderFilters(data.tags)).catch(() => {});
   loadList();
 }
 
 async function loadList() {
   const listEl = document.getElementById("recipe-list");
-  const data = await api.listRecipes(listState.search, PAGE_SIZE, listState.offset);
+  const data = await api.listRecipes(listState.search, PAGE_SIZE, listState.offset, listState.facets);
   document.getElementById("recipe-count").textContent =
     `${data.total} ${data.total === 1 ? "Rezept" : "Rezepte"}`;
 
   if (data.items.length === 0) {
+    const filtered = listState.search || anyFacetActive();
     listEl.innerHTML = `<div class="empty"><div class="big">Nichts gefunden</div>
-      Lege ein neues Rezept an oder ändere die Suche.</div>`;
+      ${filtered ? "Passe Suche oder Filter an." : "Lege ein neues Rezept an."}</div>`;
     document.getElementById("pager").innerHTML = "";
     return;
   }
@@ -154,6 +243,8 @@ async function viewRecipeDetail(id) {
         <button class="btn btn-danger" id="del">Löschen</button>
       </div>
     </div>
+
+    ${r.tags && r.tags.length ? `<div class="tag-row">${r.tags.map((t) => `<span class="chip chip-static chip-${esc(t.kind)}">${esc(t.name)}</span>`).join("")}</div>` : ""}
 
     ${r.image ? `<img class="recipe-photo" src="${esc(r.image)}" alt="${esc(r.name)}" />` : ""}
     <div class="card photo-card">
@@ -230,6 +321,19 @@ async function viewRecipeDetail(id) {
 }
 
 /* ---------------------------- Editor ------------------------------- */
+// Tag-Auswahl im Editor: feste Vokabular-Chips je Facette, an/aus per Klick.
+function renderTagPicker(container, selected) {
+  const sel = new Set((selected || []).map((t) => `${t.kind}|${t.name}`));
+  container.innerHTML = KIND_ORDER.map((k) => {
+    const chips = TAG_VOCAB[k].map((name) => {
+      const active = sel.has(`${k}|${name}`);
+      return `<button type="button" class="chip${active ? " active" : ""}" data-kind="${k}" data-name="${esc(name)}">${esc(name)}</button>`;
+    }).join("");
+    return `<div class="filter-facet"><span class="filter-label">${esc(KIND_LABELS[k])}</span><div class="chips">${chips}</div></div>`;
+  }).join("");
+  container.querySelectorAll(".chip").forEach((b) => { b.onclick = () => b.classList.toggle("active"); });
+}
+
 function ingredientRow(data = {}) {
   const catOptions = CATEGORIES.map((c) =>
     `<option ${c === data.category ? "selected" : ""}>${c}</option>`).join("");
@@ -290,6 +394,9 @@ async function viewEditor(id = null) {
         <div class="field"><label>Quelle (Link, optional)</label>
           <input id="f-source" value="${esc(r.source || "")}" placeholder="https://…" /></div>
 
+        <div class="field"><label>Kategorien (Mehrfachauswahl)</label>
+          <div class="tag-pick" id="tag-pick"></div></div>
+
         <div style="display:flex; gap:.6rem;">
           <button class="btn btn-primary" id="save">${editing ? "Änderungen speichern" : "Rezept anlegen"}</button>
           <a class="btn btn-ghost" href="${editing ? `#/recipes/${id}` : "#/recipes"}">Abbrechen</a>
@@ -310,6 +417,9 @@ async function viewEditor(id = null) {
   initial.forEach((i) => ingsEl.appendChild(ingredientRow(i)));
   document.getElementById("add-ing").onclick = () => ingsEl.appendChild(ingredientRow());
 
+  const tagPick = document.getElementById("tag-pick");
+  renderTagPicker(tagPick, r.tags || []);
+
   document.getElementById("save").onclick = async () => {
     const name = document.getElementById("f-name").value.trim();
     if (!name) { toast("Bitte einen Namen angeben"); return; }
@@ -325,7 +435,10 @@ async function viewEditor(id = null) {
       }))
       .filter((i) => i.name); // leere Zeilen verwerfen
 
-    const payload = { name, servings, instructions: document.getElementById("f-instr").value.trim() || null, source: document.getElementById("f-source").value.trim() || null, ingredients };
+    const tags = [...tagPick.querySelectorAll(".chip.active")]
+      .map((c) => ({ kind: c.dataset.kind, name: c.dataset.name }));
+
+    const payload = { name, servings, instructions: document.getElementById("f-instr").value.trim() || null, source: document.getElementById("f-source").value.trim() || null, ingredients, tags };
     try {
       const saved = editing ? await api.updateRecipe(id, payload) : await api.createRecipe(payload);
       toast(editing ? "Gespeichert" : "Rezept angelegt");
@@ -543,8 +656,11 @@ function viewImport() {
 
 /* ------------------------------ Router ----------------------------- */
 async function router() {
-  const hash = location.hash || "#/recipes";
-  const parts = hash.slice(2).split("/"); // "recipes/3/edit" -> ["recipes","3","edit"]
+  const raw = (location.hash || "#/recipes").slice(2);
+  const qi = raw.indexOf("?");
+  const path = qi === -1 ? raw : raw.slice(0, qi);
+  const queryStr = qi === -1 ? "" : raw.slice(qi + 1);
+  const parts = path.split("/"); // "recipes/3/edit" -> ["recipes","3","edit"]
   app.innerHTML = `<div class="empty">lade …</div>`;
   try {
     if (parts[0] === "recipes" && parts[1] && parts[2] === "edit") await viewEditor(parts[1]);
@@ -554,7 +670,7 @@ async function router() {
     else if (parts[0] === "plan") await viewPlan();
     else if (parts[0] === "shopping") await viewShopping();
     else if (parts[0] === "prep") await viewPrep();
-    else await viewRecipes();
+    else { applyRecipesQuery(queryStr); await viewRecipes(); }
   } catch (e) {
     app.innerHTML = `<div class="empty"><div class="big">Etwas ist schiefgelaufen</div>${esc(e.message)}</div>`;
   }

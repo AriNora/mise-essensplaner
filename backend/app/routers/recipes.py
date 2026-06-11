@@ -19,14 +19,30 @@ ALLOWED_IMAGE_TYPES = {
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
+def _split_csv(value: str) -> list:
+    """'Suppe,Curry' -> ['Suppe', 'Curry']; leere Teile werden verworfen."""
+    return [p.strip() for p in (value or "").split(",") if p.strip()]
+
+
 @router.get("", response_model=schemas.RecipeListResponse)
 def list_recipes(
     search: str = "",
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    typ: str = "",
+    kueche: str = "",
+    eig: str = "",
     db: Session = Depends(get_db),
 ):
-    total, items = crud.list_recipes(db, search=search, limit=limit, offset=offset)
+    # Komma-getrennte Filter je Facette in ein Dict uebersetzen.
+    facets = {
+        "typ": _split_csv(typ),
+        "kueche": _split_csv(kueche),
+        "eigenschaft": _split_csv(eig),
+    }
+    total, items = crud.list_recipes(
+        db, search=search, limit=limit, offset=offset, facets=facets
+    )
     return {"total": total, "items": items}
 
 

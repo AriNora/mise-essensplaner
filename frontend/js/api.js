@@ -18,8 +18,20 @@ async function request(path, options = {}) {
 
 export const api = {
   // Rezepte
-  listRecipes: (search = "", limit = 50, offset = 0) =>
-    request(`/api/recipes?search=${encodeURIComponent(search)}&limit=${limit}&offset=${offset}`),
+  listRecipes: (search = "", limit = 50, offset = 0, facets = {}) => {
+    const p = new URLSearchParams();
+    p.set("search", search);
+    p.set("limit", limit);
+    p.set("offset", offset);
+    // Facetten -> Query-Parameter (typ/kueche/eig), komma-getrennt.
+    const param = { typ: "typ", kueche: "kueche", eigenschaft: "eig" };
+    for (const kind of Object.keys(param)) {
+      const vals = facets[kind] || [];
+      if (vals.length) p.set(param[kind], vals.join(","));
+    }
+    return request(`/api/recipes?${p.toString()}`);
+  },
+  listTags: () => request(`/api/tags`),
   getRecipe: (id) => request(`/api/recipes/${id}`),
   createRecipe: (data) => request(`/api/recipes`, { method: "POST", body: JSON.stringify(data) }),
   updateRecipe: (id, data) => request(`/api/recipes/${id}`, { method: "PUT", body: JSON.stringify(data) }),

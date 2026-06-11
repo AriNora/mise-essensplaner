@@ -29,6 +29,29 @@ class RecipeIngredientOut(BaseModel):
     position: int = 0
 
 
+# ---------- Schlagworte (Tags) ----------
+class TagIn(BaseModel):
+    kind: str = Field(..., min_length=1)   # "typ" | "kueche" | "eigenschaft"
+    name: str = Field(..., min_length=1)
+
+
+class TagOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    kind: str
+    name: str
+
+
+class TagCount(BaseModel):
+    """Ein Tag samt Anzahl Rezepte – fuer die Filterleiste (Chips mit Zahl)."""
+    kind: str
+    name: str
+    count: int
+
+
+class TagListResponse(BaseModel):
+    tags: List[TagCount]
+
+
 # ---------- Rezept ----------
 class RecipeBase(BaseModel):
     name: str = Field(..., min_length=1)
@@ -39,10 +62,12 @@ class RecipeBase(BaseModel):
 
 class RecipeCreate(RecipeBase):
     ingredients: List[RecipeIngredientBase] = []
+    tags: List[TagIn] = []
 
 
 class RecipeUpdate(RecipeBase):
     ingredients: List[RecipeIngredientBase] = []
+    tags: List[TagIn] = []
 
 
 class RecipeListItem(BaseModel):
@@ -62,6 +87,7 @@ class RecipeOut(RecipeBase):
     updated_at: datetime
     image: Optional[str] = None
     ingredients: List[RecipeIngredientOut] = []
+    tags: List[TagOut] = []
 
 
 class RecipeListResponse(BaseModel):

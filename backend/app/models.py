@@ -23,7 +23,9 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -62,6 +64,16 @@ class Recipe(Base):
         order_by="RecipeIngredient.position",
     )
 
+    # Schlagworte (n:m). Ein Rezept kann mehrere Tags haben, ein Tag mehrere
+    # Rezepte. Die Verknuepfung laeuft ueber die Tabelle recipe_tags (unten).
+    # secondary als String -> Reihenfolge der Definitionen im Modul egal.
+    tags = relationship(
+        "Tag",
+        secondary="recipe_tags",
+        back_populates="recipes",
+        order_by="Tag.name",
+    )
+
 
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
@@ -90,3 +102,33 @@ class PlanEntry(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     recipe = relationship("Recipe")
+
+
+class Tag(Base):
+    """Ein Schlagwort fuer Rezepte, z.B. ('typ','Suppe') oder ('kueche','Indisch').
+
+    `kind` ordnet das Tag einer Facette zu (Gericht-Typ / Kueche / Eigenschaft),
+    sodass das Frontend die Filter gruppiert anzeigen kann. (kind, name) ist
+    eindeutig: 'Suppe' als Typ und 'Suppe' als Kueche waeren zwar zwei Eintraege,
+    aber innerhalb einer Facette gibt es jeden Namen nur einmal -> saubere
+    Normalisierung, genau wie bei den Zutaten.
+    """
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String, nullable=False, index=True)   # "typ" | "kueche" | "eigenschaft"
+    name = Column(String, nullable=False, index=True)
+
+    __table_args__ = (UniqueConstraint("kind", "name", name="uq_tag_kind_name"),)
+
+    recipes = relationship("Recipe", secondary="recipe_tags", back_populates="tags")
+
+
+# Reine Verknuepfungstabelle (kein eigenes Modell noetig): welches Rezept traegt
+# welches Tag. Loescht man ein Rezept oder Tag, fallen die Verknuepfungen weg.
+recipe_tags = Table(
+    "recipe_tags",
+    Base.metadata,
+    Column("recipe_id", Integer, ForeignKey("recipes.id", ondelete="CASCADE"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+)
