@@ -174,6 +174,11 @@ async function viewRecipeDetail(id) {
     ${r.instructions ? `<div class="card"><h3 style="margin-top:0">Zubereitung</h3>
         <div class="steps">${esc(r.instructions)}</div></div>` : ""}
 
+    ${r.source ? `<div class="card"><h3 style="margin-top:0">Quelle</h3>
+        ${/^https?:\/\//i.test(r.source)
+          ? `<a href="${esc(r.source)}" target="_blank" rel="noopener noreferrer" style="word-break:break-all">${esc(r.source)}</a>`
+          : `<div class="kv">${esc(r.source)}</div>`}</div>` : ""}
+
     <div class="card">
       <h3 style="margin-top:0">Zum Wochenplan hinzufügen</h3>
       <div class="stepper" style="margin-bottom:.7rem">
@@ -250,7 +255,7 @@ function ingredientRow(data = {}) {
 async function viewEditor(id = null) {
   setActiveNav("recipes");
   const editing = id != null;
-  let r = { name: "", servings: 2, instructions: "", ingredients: [] };
+  let r = { name: "", servings: 2, instructions: "", source: "", ingredients: [] };
   if (editing) {
     try { r = await api.getRecipe(id); }
     catch (_) { app.innerHTML = `<div class="empty">Rezept nicht gefunden.</div>`; return; }
@@ -281,6 +286,9 @@ async function viewEditor(id = null) {
 
         <div class="field"><label>Zubereitung (optional)</label>
           <textarea id="f-instr" rows="5" placeholder="Schritt für Schritt …">${esc(r.instructions || "")}</textarea></div>
+
+        <div class="field"><label>Quelle (Link, optional)</label>
+          <input id="f-source" value="${esc(r.source || "")}" placeholder="https://…" /></div>
 
         <div style="display:flex; gap:.6rem;">
           <button class="btn btn-primary" id="save">${editing ? "Änderungen speichern" : "Rezept anlegen"}</button>
@@ -317,7 +325,7 @@ async function viewEditor(id = null) {
       }))
       .filter((i) => i.name); // leere Zeilen verwerfen
 
-    const payload = { name, servings, instructions: document.getElementById("f-instr").value.trim() || null, ingredients };
+    const payload = { name, servings, instructions: document.getElementById("f-instr").value.trim() || null, source: document.getElementById("f-source").value.trim() || null, ingredients };
     try {
       const saved = editing ? await api.updateRecipe(id, payload) : await api.createRecipe(payload);
       toast(editing ? "Gespeichert" : "Rezept angelegt");
