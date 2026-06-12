@@ -208,3 +208,14 @@ input::placeholder { color: #9aa098; }
 @media (max-width: 640px) {
   .filter-label { min-width: auto; width: 100%; }
 }
+
+/* Eigene Tags anlegen (offene Facetten, z. B. Küche) */
+.chip-add { border-style: dashed; color: var(--muted); background: #fff; }
+.chip-add:hover { color: var(--ink); border-color: #c8cabf; }
+.chip-add-form { display: inline-flex; align-items: center; gap: .35rem; }
+.chip-add-input {
+  font: inherit; font-size: .85rem; padding: .26rem .55rem;
+  border: 1px solid var(--herb); border-radius: 999px; outline: none; min-width: 8rem;
+}
+.chip-add-ok { background: var(--herb); color: #fff; border-color: var(--herb); }
+.chip-add-ok:hover { border-color: var(--herb); }

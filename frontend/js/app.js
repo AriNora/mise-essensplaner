@@ -321,17 +321,92 @@ async function viewRecipeDetail(id) {
 }
 
 /* ---------------------------- Editor ------------------------------- */
-// Tag-Auswahl im Editor: feste Vokabular-Chips je Facette, an/aus per Klick.
-function renderTagPicker(container, selected) {
-  const sel = new Set((selected || []).map((t) => `${t.kind}|${t.name}`));
+// In diesen Facetten darf der Nutzer eigene Tags anlegen (offenes Vokabular).
+// Typ und Eigenschaft bleiben bewusst kuratiert.
+const CUSTOM_FACETS = ["kueche"];
+
+// Tag-Namen vereinheitlichen: Kommas/doppelte Leerzeichen raus (Kommas wuerden
+// die Filter-Parameter zerlegen), sanfte Gross-Schreibung, Laenge begrenzen.
+function sanitizeTagName(value) {
+  let s = (value || "").replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  s = s.charAt(0).toUpperCase() + s.slice(1);
+  return s.slice(0, 30);
+}
+
+// Auswahlmoeglichkeiten einer Facette = Basis-Vokabular + bereits benutzte Tags
+// (aus /api/tags) + die am Rezept gesetzten. Dedup case-insensitiv.
+function facetOptions(kind, selected, knownTags) {
+  const seen = new Map(); // lowercase -> Anzeigename (erste Schreibweise gewinnt)
+  const add = (name) => { const key = name.toLowerCase(); if (!seen.has(key)) seen.set(key, name); };
+  (TAG_VOCAB[kind] || []).forEach(add);
+  (knownTags || []).filter((t) => t.kind === kind).forEach((t) => add(t.name));
+  (selected || []).filter((t) => t.kind === kind).forEach((t) => add(t.name));
+  const names = [...seen.values()];
+  if (kind === "kueche") names.sort((a, b) => a.localeCompare(b, "de")); // waechst -> alphabetisch
+  return names;
+}
+
+// Tag-Auswahl im Editor: Chips je Facette, an/aus per Klick. In CUSTOM_FACETS
+// zusaetzlich ein "+ Andere…"-Feld zum Anlegen eigener Tags.
+function renderTagPicker(container, selected, knownTags) {
+  const sel = new Set((selected || []).map((t) => `${t.kind}|${t.name.toLowerCase()}`));
   container.innerHTML = KIND_ORDER.map((k) => {
-    const chips = TAG_VOCAB[k].map((name) => {
-      const active = sel.has(`${k}|${name}`);
+    const chips = facetOptions(k, selected, knownTags).map((name) => {
+      const active = sel.has(`${k}|${name.toLowerCase()}`);
       return `<button type="button" class="chip${active ? " active" : ""}" data-kind="${k}" data-name="${esc(name)}">${esc(name)}</button>`;
     }).join("");
-    return `<div class="filter-facet"><span class="filter-label">${esc(KIND_LABELS[k])}</span><div class="chips">${chips}</div></div>`;
+    const adder = CUSTOM_FACETS.includes(k)
+      ? `<button type="button" class="chip chip-add" data-add="${k}">+ Andere…</button>` : "";
+    return `<div class="filter-facet"><span class="filter-label">${esc(KIND_LABELS[k])}</span><div class="chips">${chips}${adder}</div></div>`;
   }).join("");
-  container.querySelectorAll(".chip").forEach((b) => { b.onclick = () => b.classList.toggle("active"); });
+
+  container.querySelectorAll(".chip:not(.chip-add)").forEach((b) => {
+    b.onclick = () => b.classList.toggle("active");
+  });
+  container.querySelectorAll(".chip-add").forEach((b) => {
+    b.onclick = () => openCustomInput(b, b.dataset.add);
+  });
+}
+
+// Kleines Eingabefeld neben "+ Andere…" zum Tippen einer neuen Kategorie.
+function openCustomInput(addBtn, kind) {
+  if (addBtn.dataset.open === "1") return;
+  addBtn.dataset.open = "1";
+  const form = node(`<span class="chip-add-form">
+    <input type="text" class="chip-add-input" maxlength="30" placeholder="z. B. Türkisch" />
+    <button type="button" class="chip chip-add-ok">Hinzufügen</button></span>`);
+  addBtn.insertAdjacentElement("afterend", form);
+  const input = form.querySelector(".chip-add-input");
+  const chipsRow = addBtn.parentElement;
+  input.focus();
+
+  const close = () => { form.remove(); addBtn.dataset.open = ""; };
+  const commit = () => {
+    const name = sanitizeTagName(input.value);
+    if (name) addCustomChip(chipsRow, addBtn, kind, name);
+    close();
+  };
+  form.querySelector(".chip-add-ok").onclick = commit;
+  input.onkeydown = (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commit(); }
+    else if (e.key === "Escape") { e.preventDefault(); close(); }
+  };
+  // Klick auf "Hinzufügen" loest erst blur aus -> kurze Verzoegerung, dann schliessen.
+  input.onblur = () => setTimeout(() => { if (addBtn.dataset.open === "1") close(); }, 120);
+}
+
+// Neuen Chip einfuegen (oder vorhandenen aktivieren, falls schon da).
+function addCustomChip(chipsRow, addBtn, kind, name) {
+  const existing = [...chipsRow.querySelectorAll(".chip:not(.chip-add)")]
+    .find((c) => (c.dataset.name || "").toLowerCase() === name.toLowerCase());
+  if (existing) { existing.classList.add("active"); return; }
+  const chip = node(`<button type="button" class="chip active"></button>`);
+  chip.dataset.kind = kind;
+  chip.dataset.name = name;
+  chip.textContent = name;
+  chip.onclick = () => chip.classList.toggle("active");
+  addBtn.insertAdjacentElement("beforebegin", chip); // vor dem "+ Andere…"
 }
 
 function ingredientRow(data = {}) {
@@ -418,7 +493,9 @@ async function viewEditor(id = null) {
   document.getElementById("add-ing").onclick = () => ingsEl.appendChild(ingredientRow());
 
   const tagPick = document.getElementById("tag-pick");
-  renderTagPicker(tagPick, r.tags || []);
+  // Bereits benutzte Tags holen, damit eigene Küchen als Vorschlag erscheinen.
+  const knownTags = await api.listTags().then((d) => d.tags).catch(() => []);
+  renderTagPicker(tagPick, r.tags || [], knownTags);
 
   document.getElementById("save").onclick = async () => {
     const name = document.getElementById("f-name").value.trim();

@@ -77,7 +77,9 @@ def get_or_create_tag(db: Session, kind: str, name: str) -> Optional[models.Tag]
     """Findet ein Tag per (kind, name) oder legt es an. Gleiche Idee wie bei den
     Zutaten: jedes Schlagwort existiert genau einmal, Rezepte verweisen darauf."""
     kind = (kind or "").strip().lower()
-    name = (name or "").strip()
+    # Kommas wuerden die Filter-Parameter (CSV) zerlegen -> entfernen; Mehrfach-
+    # Leerzeichen zusammenfassen; aussen trimmen. Gilt fuer alle Quellen.
+    name = " ".join((name or "").replace(",", " ").split())
     if kind not in KIND_ORDER or not name:
         return None
     tag = (

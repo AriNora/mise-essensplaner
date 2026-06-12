@@ -1,0 +1,39 @@
+MISE — UPDATE: eigene Küchen-Kategorien
+=======================================
+
+Was ist neu
+-----------
+- Im Rezept-Editor ist die Facette "Küche" jetzt offen: unter den vorhandenen
+  Küche-Chips gibt es "+ Andere…". Klick darauf, tippe z. B. "Türkisch",
+  Enter (oder "Hinzufügen") – fertig. Der neue Chip ist sofort aktiv.
+- Nach dem Speichern taucht die neue Küche automatisch in der Filterleiste auf
+  (sobald mindestens ein Rezept sie trägt) und wird beim nächsten Mal als
+  normaler Vorschlag-Chip angeboten.
+- Komfort: gleiche Schreibweise wird zusammengefasst (tippst du "türkisch" und
+  es gibt schon "Türkisch", wird kein Doppel angelegt), der Anfangsbuchstabe
+  wird groß geschrieben, Kommas werden entfernt.
+- Gericht-Typ und Eigenschaft bleiben bewusst als feste Auswahl (kuratiert).
+  Wenn du das später öffnen willst, genügt ein Eintrag in CUSTOM_FACETS in
+  app.js.
+
+Geänderte Dateien (vorhandene ersetzen)
+---------------------------------------
+  backend/app/crud.py        (Tag-Namen werden serverseitig sauber normalisiert)
+  frontend/js/app.js         (erweiterbare Küche im Editor)
+  frontend/css/styles.css    (Stil für das Eingabefeld)
+
+Einbauen
+--------
+1. Die drei Dateien ersetzen.
+2. Server EINMAL neu starten (es ist eine kleine Backend-Änderung):
+     .\.venv\Scripts\python.exe -m uvicorn app.main:app
+   Danach im Browser Strg+F5.
+Keine Datenbank-Migration nötig, bestehende Tags bleiben unangetastet.
+
+Hinweis fürs Kolloquium
+-----------------------
+Server und Datenmodell konnten eigene Tags schon immer (jedes (kind, name) ist
+erlaubt) – neu ist nur die Bedien-Oberfläche dafür. Eigene Küchen laufen über
+denselben tag-Endpunkt und dieselbe Normalisierung wie alles andere; das offene
+Vokabular ist bewusst auf "Küche" begrenzt, weil Typ/Eigenschaft als kuratierte
+Dimensionen mehr Datenqualität bringen.
