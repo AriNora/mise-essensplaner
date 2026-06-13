@@ -12,3 +12,7 @@ uploads/
 .DS_Store
 .idea/
 .vscode/
+
+# Bring!-Zugangsdaten (nie committen)
+bring_account.json
+backend/bring_account.json

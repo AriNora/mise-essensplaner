@@ -322,8 +322,10 @@ async function viewRecipeDetail(id) {
 
 /* ---------------------------- Editor ------------------------------- */
 // In diesen Facetten darf der Nutzer eigene Tags anlegen (offenes Vokabular).
-// Typ und Eigenschaft bleiben bewusst kuratiert.
-const CUSTOM_FACETS = ["kueche"];
+// Das Basis-Vokabular bleibt als Vorschlag erhalten; eigene Eintraege kommen dazu.
+const CUSTOM_FACETS = ["typ", "kueche", "eigenschaft"];
+// Facetten-passende Beispiele im Eingabefeld.
+const CUSTOM_PLACEHOLDER = { typ: "z. B. Auflauf", kueche: "z. B. Türkisch", eigenschaft: "z. B. kalorienarm" };
 
 // Tag-Namen vereinheitlichen: Kommas/doppelte Leerzeichen raus (Kommas wuerden
 // die Filter-Parameter zerlegen), sanfte Gross-Schreibung, Laenge begrenzen.
@@ -374,7 +376,7 @@ function openCustomInput(addBtn, kind) {
   if (addBtn.dataset.open === "1") return;
   addBtn.dataset.open = "1";
   const form = node(`<span class="chip-add-form">
-    <input type="text" class="chip-add-input" maxlength="30" placeholder="z. B. Türkisch" />
+    <input type="text" class="chip-add-input" maxlength="30" placeholder="${esc(CUSTOM_PLACEHOLDER[kind] || "Neue Kategorie")}" />
     <button type="button" class="chip chip-add-ok">Hinzufügen</button></span>`);
   addBtn.insertAdjacentElement("afterend", form);
   const input = form.querySelector(".chip-add-input");
@@ -611,28 +613,64 @@ async function viewShopping() {
     return;
   }
 
+  // Laufende Nummer fuer eindeutige Checkbox-IDs (gleicher Name kann in zwei
+  // Einheiten vorkommen -> sonst doppelte IDs). data-* traegt die Werte fuer Bring!.
+  let n = 0;
   const groups = data.groups.map((g) => `
     <div class="group">
       <h3>${esc(g.category)}</h3>
       <ul class="check-list">
-        ${g.items.map((i) => `
-          <li>
-            <input type="checkbox" id="c-${esc(i.name)}" />
-            <label for="c-${esc(i.name)}">${esc(i.name)}</label>
-            <span class="amount">${i.amount != null ? esc(fmtNum(i.amount)) + " " + esc(i.unit || "") : "nach Bedarf"}</span>
-          </li>`).join("")}
+        ${g.items.map((i) => {
+          const id = `c-${n++}`;
+          const amountText = i.amount != null ? esc(fmtNum(i.amount)) + " " + esc(i.unit || "") : "nach Bedarf";
+          return `
+          <li data-name="${esc(i.name)}" data-amount="${i.amount != null ? i.amount : ""}" data-unit="${esc(i.unit || "")}">
+            <input type="checkbox" id="${id}" />
+            <label for="${id}">${esc(i.name)}</label>
+            <span class="amount">${amountText}</span>
+          </li>`;
+        }).join("")}
       </ul>
     </div>`).join("");
 
   app.innerHTML = `
     <div class="page-head"><div><h1>Einkaufsliste</h1>
-      <div class="sub">aus deinem aktuellen Wochenplan, Mengen zusammengefasst</div></div>
-      <button class="btn" id="print">Drucken</button></div>
+      <div class="sub">Hake ab, was du schon im Vorrat hast – an Bring! gehen nur die offenen Posten.</div></div>
+      <div style="display:flex; gap:.5rem;">
+        <button class="btn btn-primary" id="bring">An Bring! senden</button>
+        <button class="btn" id="print">Drucken</button>
+      </div></div>
     ${groups}
   `;
   document.getElementById("print").onclick = () => window.print();
 
-  // Abhaken (nur visuell, clientseitig)
+  // An Bring! senden – nur die NICHT abgehakten Posten (= noch zu kaufen).
+  const bringBtn = document.getElementById("bring");
+  bringBtn.onclick = async () => {
+    const items = [...app.querySelectorAll(".check-list li:not(.done)")].map((li) => ({
+      name: li.dataset.name,
+      amount: li.dataset.amount === "" ? null : Number(li.dataset.amount),
+      unit: li.dataset.unit || null,
+    }));
+    if (items.length === 0) {
+      toast("Alles abgehakt – nichts an Bring! zu senden.");
+      return;
+    }
+    const label = bringBtn.textContent;
+    bringBtn.disabled = true;
+    bringBtn.textContent = "Sende …";
+    try {
+      const res = await api.sendToBring(items);
+      toast(`${res.sent} ${res.sent === 1 ? "Posten" : "Posten"} an Bring! gesendet${res.list ? " (Liste: " + res.list + ")" : ""}.`);
+    } catch (e) {
+      toast(e.message);
+    } finally {
+      bringBtn.disabled = false;
+      bringBtn.textContent = label;
+    }
+  };
+
+  // Abhaken (= vorrätig): markiert die Zeile, schließt sie vom Bring!-Versand aus.
   app.querySelectorAll(".check-list input").forEach((cb) => {
     cb.onchange = () => cb.closest("li").classList.toggle("done", cb.checked);
   });

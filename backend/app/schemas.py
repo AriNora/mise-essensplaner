@@ -134,6 +134,23 @@ class ShoppingListResponse(BaseModel):
     groups: List[ShoppingGroup]
 
 
+# ---------- Bring!-Versand ----------
+class BringItemIn(BaseModel):
+    """Ein Posten, der an Bring! gesendet werden soll."""
+    name: str = Field(..., min_length=1)
+    amount: Optional[float] = None
+    unit: Optional[str] = None
+
+
+class BringSendRequest(BaseModel):
+    """Optionaler Body fuer /api/bring/send.
+
+    Wird `items` mitgegeben (die im Browser NICHT abgehakten Posten), senden wir
+    genau diese. Ohne Body faellt der Endpunkt auf die volle Einkaufsliste zurueck.
+    """
+    items: Optional[List[BringItemIn]] = None
+
+
 # ---------- Vorbereitungsplan (Mise en place) ----------
 class PrepItem(BaseModel):
     name: str

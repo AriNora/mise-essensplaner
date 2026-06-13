@@ -343,6 +343,20 @@ CATEGORY_ORDER = [
 ]
 
 
+# Zutaten, von denen wir annehmen, dass sie immer im Vorrat sind -> sie landen
+# nie auf der Einkaufsliste. Hier ganz normal schreiben (Gross-/Kleinschreibung
+# und ss/ß egal) – die Liste wird unten per casefold() vereinheitlicht. Exakte
+# Namen -> kaufbares wie "Mineralwasser"/"Kokoswasser" bleibt unberuehrt.
+_PANTRY_STAPLES_RAW = [
+    "Wasser",
+    "Nudelwasser",
+    "heißes Wasser",
+    "kaltes Wasser",
+    "lauwarmes Wasser",
+]
+PANTRY_STAPLES = {s.casefold() for s in _PANTRY_STAPLES_RAW}
+
+
 def build_shopping_list(db: Session) -> dict:
     """Aggregiert alle Zutaten der geplanten Rezepte.
 
@@ -353,7 +367,8 @@ def build_shopping_list(db: Session) -> dict:
       4. Nach Warengruppe gruppieren.
 
     Zutaten ohne Menge (z.B. "Salz, nach Geschmack") werden gelistet, aber nicht
-    numerisch summiert.
+    numerisch summiert. Vorrats-Selbstverstaendlichkeiten (siehe PANTRY_STAPLES,
+    z.B. Wasser) werden komplett ausgelassen.
     """
     entries = db.query(models.PlanEntry).join(models.Recipe).all()
 
@@ -364,6 +379,8 @@ def build_shopping_list(db: Session) -> dict:
         factor = entry.servings / recipe.servings if recipe.servings else 1.0
         for ri in recipe.ingredients:
             name = ri.ingredient.name
+            if " ".join(name.split()).casefold() in PANTRY_STAPLES:
+                continue  # immer im Vorrat -> nicht einkaufen
             unit = ri.unit
             key = (name.lower(), (unit or "").lower())
             bucket = agg.setdefault(

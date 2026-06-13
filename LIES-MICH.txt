@@ -1,39 +1,37 @@
-MISE — UPDATE: eigene Küchen-Kategorien
-=======================================
+Mise – Schritt 2: Nur nicht abgehakte Posten an Bring! senden
+=============================================================
 
 Was ist neu
 -----------
-- Im Rezept-Editor ist die Facette "Küche" jetzt offen: unter den vorhandenen
-  Küche-Chips gibt es "+ Andere…". Klick darauf, tippe z. B. "Türkisch",
-  Enter (oder "Hinzufügen") – fertig. Der neue Chip ist sofort aktiv.
-- Nach dem Speichern taucht die neue Küche automatisch in der Filterleiste auf
-  (sobald mindestens ein Rezept sie trägt) und wird beim nächsten Mal als
-  normaler Vorschlag-Chip angeboten.
-- Komfort: gleiche Schreibweise wird zusammengefasst (tippst du "türkisch" und
-  es gibt schon "Türkisch", wird kein Doppel angelegt), der Anfangsbuchstabe
-  wird groß geschrieben, Kommas werden entfernt.
-- Gericht-Typ und Eigenschaft bleiben bewusst als feste Auswahl (kuratiert).
-  Wenn du das später öffnen willst, genügt ein Eintrag in CUSTOM_FACETS in
-  app.js.
+Auf der Einkaufsliste hakst du ab, was du schon im Vorrat hast.
+Beim Klick auf "An Bring! senden" gehen nur noch die NICHT abgehakten
+Posten (= die, die du wirklich kaufen musst) an Bring!.
+Sind alle abgehakt, erscheint nur ein Hinweis – es wird nichts gesendet.
 
 Geänderte Dateien (vorhandene ersetzen)
 ---------------------------------------
-  backend/app/crud.py        (Tag-Namen werden serverseitig sauber normalisiert)
-  frontend/js/app.js         (erweiterbare Küche im Editor)
-  frontend/css/styles.css    (Stil für das Eingabefeld)
+  backend/app/schemas.py            (neues Eingabe-Schema fuer den Versand)
+  backend/app/routers/bring.py      (Endpunkt nimmt die ausgewaehlten Posten)
+  frontend/js/api.js                (sendToBring uebergibt die Auswahl)
+  frontend/js/app.js                (Liste merkt sich Posten, sendet nur offene)
 
-Einbauen
---------
-1. Die drei Dateien ersetzen.
-2. Server EINMAL neu starten (es ist eine kleine Backend-Änderung):
-     .\.venv\Scripts\python.exe -m uvicorn app.main:app
-   Danach im Browser Strg+F5.
-Keine Datenbank-Migration nötig, bestehende Tags bleiben unangetastet.
+Einbau
+------
+1) Die vier Dateien an gleicher Stelle ersetzen.
+2) Server EINMAL neu starten (Backend wurde geaendert):
+   .\.venv\Scripts\python.exe -m uvicorn app.main:app
+3) Im Browser Strg+F5 (harter Reload, sonst zieht der alte JS-Cache).
 
-Hinweis fürs Kolloquium
------------------------
-Server und Datenmodell konnten eigene Tags schon immer (jedes (kind, name) ist
-erlaubt) – neu ist nur die Bedien-Oberfläche dafür. Eigene Küchen laufen über
-denselben tag-Endpunkt und dieselbe Normalisierung wie alles andere; das offene
-Vokabular ist bewusst auf "Küche" begrenzt, weil Typ/Eigenschaft als kuratierte
-Dimensionen mehr Datenqualität bringen.
+Deine Daten (Rezepte, Plan, bring_account.json) bleiben unberuehrt.
+
+Zusammenspiel mit Schritt 1
+---------------------------
+Wasser & Co. (siehe PANTRY_STAPLES in crud.py) tauchen gar nicht erst auf
+der Liste auf – sie koennen also auch nicht versehentlich gesendet werden.
+
+Hinweis fuers Kolloquium
+------------------------
+Die Auswahl passiert im Browser; das Backend nimmt die Posten als
+optionalen Body entgegen. Ohne Body faellt der Endpunkt auf die komplette
+Liste zurueck (abwaertskompatibel). Getestet: Auswahl wird 1:1 gesendet,
+leere Auswahl sendet nichts, Mengen werden korrekt formatiert (z.B. "1,5 l").

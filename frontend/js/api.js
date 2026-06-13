@@ -65,4 +65,8 @@ export const api = {
   clearPlan: () => request(`/api/plan`, { method: "DELETE" }),
   shoppingList: () => request(`/api/plan/shopping-list`),
   prepPlan: () => request(`/api/plan/prep-plan`),
+
+  // Bring!-Anbindung
+  bringStatus: () => request(`/api/bring/status`),
+  sendToBring: (items) => request(`/api/bring/send`, { method: "POST", body: JSON.stringify({ items }) }),
 };

@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 
 from .database import UPLOAD_DIR, Base, engine
-from .routers import imports, ingredients, plan, recipes, tags
+from .routers import bring, imports, ingredients, plan, recipes, tags
 
 # Tabellen anlegen, falls noch nicht vorhanden.
 Base.metadata.create_all(bind=engine)
@@ -44,6 +44,7 @@ app.include_router(ingredients.router)
 app.include_router(plan.router)
 app.include_router(imports.router)
 app.include_router(tags.router)
+app.include_router(bring.router)
 
 # Hochgeladene Rezeptbilder unter /uploads ausliefern.
 # WICHTIG: vor dem "/"-Mount, da dieser als Catch-all alles abfaengt.
