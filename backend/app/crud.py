@@ -357,6 +357,46 @@ _PANTRY_STAPLES_RAW = [
 PANTRY_STAPLES = {s.casefold() for s in _PANTRY_STAPLES_RAW}
 
 
+# --------------------------------------------------------------------------- #
+#  Einheiten-Umrechnung fuer die Einkaufsliste (Schritt 3)
+# --------------------------------------------------------------------------- #
+# Schreibweisen -> kanonische Einheit (case-insensitiv, auch Vollwoerter).
+_UNIT_CANON = {
+    "g": "g", "gr": "g", "gramm": "g",
+    "ml": "ml", "milliliter": "ml",
+    "el": "EL", "essl": "EL", "essl.": "EL", "esslöffel": "EL", "essloeffel": "EL",
+    "tl": "TL", "teel": "TL", "teel.": "TL", "teelöffel": "TL", "teeloeffel": "TL",
+    "cm": "cm",
+    "zehe": "Zehe", "zehen": "Zehe",
+}
+# Umrechenbare Einheiten -> Aequivalent in g/ml. Luigis Faktoren:
+# 1 EL = 15 g/ml, 1 TL = 5 g/ml = 1 cm.
+_CONVERTIBLE = {"g": 1.0, "ml": 1.0, "EL": 15.0, "TL": 5.0, "cm": 5.0}
+# Unter dieser Schwelle (g/ml) lieber in Loeffeln anzeigen, sonst in g/ml.
+_SPOON_THRESHOLD = 40.0
+# Zutaten-Profil Knoblauch: gefuehrt in Zehen. 1 TL gehackter Knoblauch = 1 Zehe,
+# 1 EL = 3 Zehen (aus 1 EL = 3 TL). Greift nur beim exakten Namen "Knoblauch".
+_GARLIC_TO_ZEHE = {"Zehe": 1.0, "TL": 1.0, "EL": 3.0}
+
+
+def _canon_unit(unit: Optional[str]) -> str:
+    """Einheit normalisieren: trimmen, casefold, bekannte Schreibweisen vereinheitlichen."""
+    s = " ".join((unit or "").split()).casefold()
+    return _UNIT_CANON.get(s, s)
+
+
+def _plural_zehe(amount: Optional[float]) -> str:
+    return "Zehe" if amount == 1 else "Zehen"
+
+
+def _spoon_display(total_gml: float) -> Tuple[float, str]:
+    """Kleine Mengen als Loeffel: EL wenn glatt durch 15 teilbar, sonst TL."""
+    el = total_gml / _CONVERTIBLE["EL"]
+    if el >= 1 and abs(el - round(el)) < 1e-9:
+        return el, "EL"
+    return total_gml / _CONVERTIBLE["TL"], "TL"
+
+
 def build_shopping_list(db: Session) -> dict:
     """Aggregiert alle Zutaten der geplanten Rezepte.
 
@@ -372,34 +412,82 @@ def build_shopping_list(db: Session) -> dict:
     """
     entries = db.query(models.PlanEntry).join(models.Recipe).all()
 
-    # key = (name_lower, unit_lower) -> aggregierter Eintrag
-    agg: Dict[tuple, dict] = {}
+    # ------------------------------------------------------------------ #
+    # 1) Beitraege pro Zutat sammeln. Pro Name trennen wir:
+    #    - umrechenbarer Teil (g/ml/EL/TL/cm) -> in g/ml-Aequivalent summiert
+    #    - Knoblauch -> in Zehen (eigene Faktoren); Knoblauchpulver -> Anzeige in TL
+    #    - alles andere (Stueck/Prise/... oder ohne Menge) -> eigene Zeile je Einheit
+    # ------------------------------------------------------------------ #
+    names: "OrderedDict[str, dict]" = OrderedDict()
     for entry in entries:
         recipe = entry.recipe
         factor = entry.servings / recipe.servings if recipe.servings else 1.0
         for ri in recipe.ingredients:
             name = ri.ingredient.name
-            if " ".join(name.split()).casefold() in PANTRY_STAPLES:
+            nkey = " ".join(name.split()).casefold()
+            if nkey in PANTRY_STAPLES:
                 continue  # immer im Vorrat -> nicht einkaufen
-            unit = ri.unit
-            key = (name.lower(), (unit or "").lower())
-            bucket = agg.setdefault(
-                key,
-                {"name": name, "unit": unit, "category": ri.ingredient.category, "amount": None},
-            )
-            if ri.amount is not None:
-                scaled = ri.amount * factor
-                bucket["amount"] = (bucket["amount"] or 0) + scaled
-            if bucket["category"] is None and ri.ingredient.category:
-                bucket["category"] = ri.ingredient.category
+            acc = names.setdefault(nkey, {
+                "name": name,
+                "category": ri.ingredient.category,
+                "conv": 0.0, "conv_units": set(), "conv_has": False,  # umrechenbarer Teil
+                "zehe": 0.0, "zehe_has": False,                        # Knoblauch-Profil
+                "plain": OrderedDict(),                                # cu -> {amount, unit}
+            })
+            if acc["category"] is None and ri.ingredient.category:
+                acc["category"] = ri.ingredient.category
 
-    # Nach Kategorie gruppieren
+            cu = _canon_unit(ri.unit)
+            amount = ri.amount * factor if ri.amount is not None else None
+
+            if nkey == "knoblauch" and cu in _GARLIC_TO_ZEHE and amount is not None:
+                acc["zehe"] += amount * _GARLIC_TO_ZEHE[cu]
+                acc["zehe_has"] = True
+            elif nkey != "knoblauch" and cu in _CONVERTIBLE and amount is not None:
+                acc["conv"] += amount * _CONVERTIBLE[cu]
+                acc["conv_units"].add(cu)
+                acc["conv_has"] = True
+            else:
+                # nicht umrechenbar (Stueck, Prise, ...) oder ohne Menge -> eigene Zeile
+                pb = acc["plain"].setdefault(cu, {"amount": None, "unit": ri.unit})
+                if amount is not None:
+                    pb["amount"] = (pb["amount"] or 0) + amount
+                if not pb["unit"] and ri.unit:
+                    pb["unit"] = ri.unit
+
+    # ------------------------------------------------------------------ #
+    # 2) Aus den Beitraegen je Zutat 1..n Anzeigezeilen bauen.
+    #    Anzeige-Einheit: Knoblauch -> Zehen; Knoblauchpulver -> TL; sonst bei
+    #    nur EINER umrechenbaren Einheit diese behalten, bei mehreren < 40 g/ml
+    #    in Loeffeln, ab 40 in g (falls vorhanden) bzw. ml.
+    # ------------------------------------------------------------------ #
     groups: "OrderedDict[str, list]" = OrderedDict()
-    for item in agg.values():
-        cat = item["category"] or "Sonstiges"
-        groups.setdefault(cat, []).append(
-            {"name": item["name"], "amount": _round(item["amount"]), "unit": item["unit"], "category": cat}
-        )
+    for nkey, acc in names.items():
+        cat = acc["category"] or "Sonstiges"
+        out = groups.setdefault(cat, [])
+        name = acc["name"]
+
+        if nkey == "knoblauch" and acc["zehe_has"]:
+            amount = _round(acc["zehe"])
+            out.append({"name": name, "amount": amount, "unit": _plural_zehe(amount), "category": cat})
+        elif nkey != "knoblauch" and acc["conv_has"]:
+            total = acc["conv"]
+            units = acc["conv_units"]
+            if nkey == "knoblauchpulver":
+                amount, unit = _round(total / _CONVERTIBLE["TL"]), "TL"
+            elif len(units) == 1:
+                u = next(iter(units))
+                amount, unit = _round(total / _CONVERTIBLE[u]), u
+            elif total < _SPOON_THRESHOLD:
+                a, unit = _spoon_display(total)
+                amount = _round(a)
+            else:
+                unit = "g" if "g" in units else "ml"
+                amount = _round(total)  # g/ml haben Faktor 1 -> total ist die Menge
+            out.append({"name": name, "amount": amount, "unit": unit, "category": cat})
+
+        for pb in acc["plain"].values():
+            out.append({"name": name, "amount": _round(pb["amount"]), "unit": pb["unit"], "category": cat})
 
     # Kategorien in sinnvolle Reihenfolge bringen (Supermarkt-Logik), Rest hinten.
     def cat_sort_key(c: str) -> int:
@@ -407,7 +495,7 @@ def build_shopping_list(db: Session) -> dict:
 
     ordered = []
     for cat in sorted(groups.keys(), key=cat_sort_key):
-        items = sorted(groups[cat], key=lambda x: x["name"].lower())
+        items = sorted(groups[cat], key=lambda x: (x["name"].lower(), (x["unit"] or "")))
         ordered.append({"category": cat, "items": items})
     return {"groups": ordered}
 
