@@ -12,9 +12,9 @@ const app = document.getElementById("app");
 let importDraft = null; // Zwischenspeicher fuer einen Import-Entwurf
 
 const CATEGORIES = [
-  "Obst & Gemuese", "Huelsenfruechte", "Getreide & Backwaren",
-  "Pflanzendrinks & Tofu", "Nuesse & Samen", "Oele & Essige",
-  "Gewuerze & Wuerze", "Konserven & Vorrat", "Sonstiges",
+  "Obst & Gemüse", "Hülsenfrüchte", "Getreide & Backwaren",
+  "Pflanzendrinks & Tofu", "Nüsse & Samen", "Öle & Essige",
+  "Gewürze & Würze", "Konserven & Vorrat", "Sonstiges",
 ];
 const PAGE_SIZE = 50;
 const DAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];

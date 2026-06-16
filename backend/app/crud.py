@@ -331,13 +331,13 @@ def clear_plan(db: Session) -> None:
 #  KERNLOGIK 1: Einkaufsliste
 # --------------------------------------------------------------------------- #
 CATEGORY_ORDER = [
-    "Obst & Gemuese",
-    "Huelsenfruechte",
+    "Obst & Gemüse",
+    "Hülsenfrüchte",
     "Getreide & Backwaren",
     "Pflanzendrinks & Tofu",
-    "Nuesse & Samen",
-    "Oele & Essige",
-    "Gewuerze & Wuerze",
+    "Nüsse & Samen",
+    "Öle & Essige",
+    "Gewürze & Würze",
     "Konserven & Vorrat",
     "Sonstiges",
 ]
