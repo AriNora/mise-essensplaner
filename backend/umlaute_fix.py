@@ -57,6 +57,8 @@ WORD_MAP = {
     "wuerfeln": "würfeln", "wuerzen": "würzen", "zerbroeselt": "zerbröselt",
     "zerdrueckt": "zerdrückt", "zerkruemeln": "zerkrümeln", "zerkruemelt": "zerkrümelt",
     "zusammenfaellt": "zusammenfällt",
+    "mitroesten": "mitrösten", "pueriert": "püriert", "stueckig": "stückig",
+    "zerdruecken": "zerdrücken", "zurueck": "zurück",
     # Substantive (Zutaten / Begriffe)
     "bruehe": "brühe", "bruehwuerfel": "brühwürfel", "chilioel": "chiliöl",
     "erdnuesse": "erdnüsse", "erdnuessen": "erdnüssen",
@@ -69,6 +71,9 @@ WORD_MAP = {
     "pflanzenoel": "pflanzenöl", "raeuchertofu": "räuchertofu",
     "senfgemuese": "senfgemüse", "sesamoel": "sesamöl", "speisestaerke": "speisestärke",
     "stueck": "stück", "stuecke": "stücke", "stuecken": "stücken",
+    "gewuerzen": "gewürzen", "nuessen": "nüssen", "ofengemuese": "ofengemüse",
+    "roeschen": "röschen", "schuessel": "schüssel", "suesskartoffel": "süßkartoffel",
+    "suesskartoffeln": "süßkartoffeln", "walnuesse": "walnüsse",
     # Kategorie-Woerter
     "huelsenfruechte": "hülsenfrüchte", "nuesse": "nüsse", "oele": "öle",
     "wuerze": "würze",
@@ -79,7 +84,8 @@ ALLOW_OK = {
     "essig", "essige", "wasser", "salzwasser", "sprossen", "sojasprossen",
     "lassen", "quellen", "gepresst", "ausgepresst", "dressing", "misopaste",
     "miso", "reisessig", "apfelessig", "balsamicoessig", "presse", "pressen",
-    "klasse", "tasse", "masse", "fluss", "schuessel",
+    "klasse", "tasse", "masse", "fluss",
+    "auspressen", "erdnuss", "erdnussmus", "lieblingsessen", "walnuss",
 }
 
 _LETTER = "A-Za-zÄÖÜäöüß"
