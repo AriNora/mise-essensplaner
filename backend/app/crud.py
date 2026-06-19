@@ -240,24 +240,17 @@ def list_recipes(
         base = base.filter(models.Recipe.name.ilike(f"%{search}%"))
 
     for kind, names in (facets or {}).items():
-        # Unicode-korrekt: angefragte Namen per casefold auf vorhandene Tag-IDs
-        # mappen. SQLites lower() ist ASCII-only und wuerde Tags mit grossem Umlaut
-        # am Wortanfang (Äthiopisch, Österreichisch, ...) nicht treffen -> der Chip
-        # zeigt zwar eine Anzahl, der Filter faende aber nichts. Darum die Aufloesung
-        # in Python statt im SQL-lower().
-        wanted = {n.strip().casefold() for n in names if n and n.strip()}
-        if not wanted:
+        clean = [n.strip().lower() for n in names if n and n.strip()]
+        if not clean:
             continue
-        tag_ids = [
-            t.id
-            for t in db.query(models.Tag).filter(models.Tag.kind == kind).all()
-            if t.name.casefold() in wanted
-        ]
-        # Leeres tag_ids -> IN () trifft nichts -> diese (mit AND verknuepfte)
-        # Facette liefert keine Treffer, was bei einer unbekannten Auswahl korrekt ist.
+        # func.lower() ist hier dank des Unicode-Overrides in database.py auch fuer
+        # grosse Umlaute am Wortanfang korrekt (Äthiopisch, Österreichisch, ...).
+        # Ohne diesen Override wuerde SQLites ASCII-lower() solche Tags uebersehen.
         sub = (
             db.query(models.recipe_tags.c.recipe_id)
-            .filter(models.recipe_tags.c.tag_id.in_(tag_ids))
+            .join(models.Tag, models.Tag.id == models.recipe_tags.c.tag_id)
+            .filter(models.Tag.kind == kind)
+            .filter(func.lower(models.Tag.name).in_(clean))
         )
         base = base.filter(models.Recipe.id.in_(sub))
 
