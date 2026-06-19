@@ -46,9 +46,26 @@ def delete_image_file(filename: Optional[str]) -> None:
 def get_or_create_ingredient(db: Session, name: str, category: Optional[str]) -> models.Ingredient:
     """Findet eine Zutat per Name oder legt sie an. So bleibt 'Zwiebel' EINE Zutat,
     egal in wie vielen Rezepten sie vorkommt -> Voraussetzung fuer korrektes
-    Aufsummieren in der Einkaufsliste."""
+    Aufsummieren in der Einkaufsliste.
+
+    Wichtig: SQLites eingebautes lower() kann nur ASCII, macht also aus 'Öl'
+    KEIN 'öl'. Ein reiner `func.lower(...)`-Vergleich uebersieht daher bereits
+    vorhandene Zutaten mit grossem Umlaut am Anfang (Öl, Äpfel, ...) und wuerde
+    sie erneut anlegen -> UNIQUE-Fehler beim Import. Darum:
+      1) exakter Namensabgleich (trifft den Normalfall beim Import zuverlaessig),
+      2) Fallback: Unicode-korrekter, gross-/kleinschreibungsunabhaengiger
+         Vergleich in Python (casefold) ueber die vorhandenen Zutaten.
+    """
     name = name.strip()
-    ing = db.query(models.Ingredient).filter(func.lower(models.Ingredient.name) == name.lower()).first()
+    # 1) Exakter Treffer (schnell, dank UNIQUE-Index) - faengt auch Umlaut-Namen.
+    ing = db.query(models.Ingredient).filter(models.Ingredient.name == name).first()
+    # 2) Fallback: gross-/kleinschreibungsunabhaengig, aber Unicode-korrekt.
+    if ing is None:
+        folded = name.casefold()
+        for cand in db.query(models.Ingredient).all():
+            if cand.name.casefold() == folded:
+                ing = cand
+                break
     if ing is None:
         ing = models.Ingredient(name=name, category=category)
         db.add(ing)
@@ -82,11 +99,24 @@ def get_or_create_tag(db: Session, kind: str, name: str) -> Optional[models.Tag]
     name = " ".join((name or "").replace(",", " ").split())
     if kind not in KIND_ORDER or not name:
         return None
+    # Wie bei den Zutaten: SQLites lower() ist ASCII-only, macht aus 'Äthiopisch'
+    # KEIN 'äthiopisch'. Ein reiner func.lower(...)-Vergleich uebersieht daher ein
+    # bereits vorhandenes Tag mit grossem Umlaut am Anfang (Äthiopisch, Südafrika-
+    # nisch, ...) und wuerde es erneut anlegen -> UNIQUE-Fehler beim Import. Darum:
+    #   1) exakter Abgleich (kind, name) - faengt auch Umlaut-Namen zuverlaessig,
+    #   2) Fallback: Unicode-korrekter, gross-/kleinschreibungsunabhaengiger
+    #      Vergleich in Python (casefold) ueber die vorhandenen Tags derselben Facette.
     tag = (
         db.query(models.Tag)
-        .filter(models.Tag.kind == kind, func.lower(models.Tag.name) == name.lower())
+        .filter(models.Tag.kind == kind, models.Tag.name == name)
         .first()
     )
+    if tag is None:
+        folded = name.casefold()
+        for cand in db.query(models.Tag).filter(models.Tag.kind == kind).all():
+            if cand.name.casefold() == folded:
+                tag = cand
+                break
     if tag is None:
         tag = models.Tag(kind=kind, name=name)
         db.add(tag)
@@ -210,14 +240,24 @@ def list_recipes(
         base = base.filter(models.Recipe.name.ilike(f"%{search}%"))
 
     for kind, names in (facets or {}).items():
-        clean = [n.strip().lower() for n in names if n and n.strip()]
-        if not clean:
+        # Unicode-korrekt: angefragte Namen per casefold auf vorhandene Tag-IDs
+        # mappen. SQLites lower() ist ASCII-only und wuerde Tags mit grossem Umlaut
+        # am Wortanfang (Äthiopisch, Österreichisch, ...) nicht treffen -> der Chip
+        # zeigt zwar eine Anzahl, der Filter faende aber nichts. Darum die Aufloesung
+        # in Python statt im SQL-lower().
+        wanted = {n.strip().casefold() for n in names if n and n.strip()}
+        if not wanted:
             continue
+        tag_ids = [
+            t.id
+            for t in db.query(models.Tag).filter(models.Tag.kind == kind).all()
+            if t.name.casefold() in wanted
+        ]
+        # Leeres tag_ids -> IN () trifft nichts -> diese (mit AND verknuepfte)
+        # Facette liefert keine Treffer, was bei einer unbekannten Auswahl korrekt ist.
         sub = (
             db.query(models.recipe_tags.c.recipe_id)
-            .join(models.Tag, models.Tag.id == models.recipe_tags.c.tag_id)
-            .filter(models.Tag.kind == kind)
-            .filter(func.lower(models.Tag.name).in_(clean))
+            .filter(models.recipe_tags.c.tag_id.in_(tag_ids))
         )
         base = base.filter(models.Recipe.id.in_(sub))
 
