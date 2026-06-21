@@ -401,6 +401,21 @@ _UNIT_CANON = {
     "tl": "TL", "teel": "TL", "teel.": "TL", "teelöffel": "TL", "teeloeffel": "TL",
     "cm": "cm",
     "zehe": "Zehe", "zehen": "Zehe",
+    # Stueck/Stück und Co.: damit handgetippte oder aeltere Schreibweisen in der
+    # Einkaufsliste als EINE Einheit zusammenfallen (sonst gilt Stueck != Stück).
+    "stück": "Stück", "stueck": "Stück", "stk": "Stück", "stk.": "Stück", "stck": "Stück",
+    "kg": "kg", "kilogramm": "kg",
+    "l": "l", "liter": "l",
+    "prise": "Prise", "prisen": "Prise",
+    "bund": "Bund",
+    "stange": "Stange", "stangen": "Stange",
+    "scheibe": "Scheibe", "scheiben": "Scheibe",
+    "dose": "Dose", "dosen": "Dose",
+    "blatt": "Blatt", "blätter": "Blatt", "blaetter": "Blatt",
+    "kopf": "Kopf", "köpfe": "Kopf", "koepfe": "Kopf",
+    "zweig": "Zweig", "zweige": "Zweig",
+    "handvoll": "Handvoll",
+    "tasse": "Tasse", "tassen": "Tasse",
 }
 # Umrechenbare Einheiten -> Aequivalent in g/ml. Luigis Faktoren:
 # 1 EL = 15 g/ml, 1 TL = 5 g/ml = 1 cm.
