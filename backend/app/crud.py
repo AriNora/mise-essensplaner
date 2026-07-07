@@ -25,6 +25,14 @@ def _round(value: Optional[float]) -> Optional[float]:
     return int(r) if r == int(r) else r
 
 
+def _round3(value: Optional[float]) -> Optional[float]:
+    """Wie _round, aber auf 3 Nachkommastellen - fuer Liter (ml-genau: 1,125 l)."""
+    if value is None:
+        return None
+    r = round(value, 3)
+    return int(r) if r == int(r) else r
+
+
 def image_url(filename: Optional[str]) -> Optional[str]:
     """Dateiname -> oeffentliche URL, unter der das Bild ausgeliefert wird."""
     return f"/uploads/{filename}" if filename else None
@@ -419,7 +427,7 @@ _UNIT_CANON = {
 }
 # Umrechenbare Einheiten -> Aequivalent in g/ml. Luigis Faktoren:
 # 1 EL = 15 g/ml, 1 TL = 5 g/ml = 1 cm.
-_CONVERTIBLE = {"g": 1.0, "ml": 1.0, "EL": 15.0, "TL": 5.0, "cm": 5.0}
+_CONVERTIBLE = {"g": 1.0, "ml": 1.0, "l": 1000.0, "EL": 15.0, "TL": 5.0, "cm": 5.0}
 # Unter dieser Schwelle (g/ml) lieber in Loeffeln anzeigen, sonst in g/ml.
 _SPOON_THRESHOLD = 40.0
 # Zutaten-Profil Knoblauch: gefuehrt in Zehen. 1 TL gehackter Knoblauch = 1 Zehe,
@@ -454,9 +462,10 @@ def build_shopping_list(db: Session) -> dict:
       3. Nach (Zutatenname, Einheit) zusammenfassen und Mengen summieren.
       4. Nach Warengruppe gruppieren.
 
-    Zutaten ohne Menge (z.B. "Salz, nach Geschmack") werden gelistet, aber nicht
-    numerisch summiert. Vorrats-Selbstverstaendlichkeiten (siehe PANTRY_STAPLES,
-    z.B. Wasser) werden komplett ausgelassen.
+    Zutaten ohne Menge (z.B. "Salz, nach Geschmack") werden NICHT auf die Liste
+    gesetzt - sie kommen aus dem Vorrat und wuerden die Liste nur aufblaehen.
+    Vorrats-Selbstverstaendlichkeiten (siehe PANTRY_STAPLES, z.B. Wasser) werden
+    ebenfalls komplett ausgelassen.
     """
     entries = db.query(models.PlanEntry).join(models.Recipe).all()
 
@@ -519,22 +528,34 @@ def build_shopping_list(db: Session) -> dict:
             amount = _round(acc["zehe"])
             out.append({"name": name, "amount": amount, "unit": _plural_zehe(amount), "category": cat})
         elif nkey != "knoblauch" and acc["conv_has"]:
-            total = acc["conv"]
+            total = acc["conv"]                 # in g/ml-Aequivalent
             units = acc["conv_units"]
             if nkey == "knoblauchpulver":
                 amount, unit = _round(total / _CONVERTIBLE["TL"]), "TL"
+            elif units == {"l"}:
+                # reine Liter-Angaben in Litern, ml-genau (3 Nachkommastellen)
+                amount, unit = _round3(total / _CONVERTIBLE["l"]), "l"
             elif len(units) == 1:
                 u = next(iter(units))
                 amount, unit = _round(total / _CONVERTIBLE[u]), u
             elif total < _SPOON_THRESHOLD:
                 a, unit = _spoon_display(total)
                 amount = _round(a)
+            elif "g" in units:
+                amount, unit = _round(total), "g"   # Masse bleibt in Gramm
+            elif total >= _CONVERTIBLE["l"]:
+                # Volumen ab 1 Liter (z.B. 1 l + 125 ml) zusammengefasst -> Liter
+                amount, unit = _round3(total / _CONVERTIBLE["l"]), "l"
             else:
-                unit = "g" if "g" in units else "ml"
-                amount = _round(total)  # g/ml haben Faktor 1 -> total ist die Menge
+                amount, unit = _round(total), "ml"  # ml haben Faktor 1 -> total ist die Menge
             out.append({"name": name, "amount": amount, "unit": unit, "category": cat})
 
         for pb in acc["plain"].values():
+            if pb["amount"] is None:
+                # Zutat ohne Mengenangabe ("nach Bedarf", z.B. Salz/Pfeffer/Oel zum
+                # Braten) -> nicht auf die Einkaufsliste. Solche Dinge nimmt man aus
+                # dem Vorrat; "nach Bedarf" laesst sich ohnehin nicht aufsummieren.
+                continue
             out.append({"name": name, "amount": _round(pb["amount"]), "unit": pb["unit"], "category": cat})
 
     # Kategorien in sinnvolle Reihenfolge bringen (Supermarkt-Logik), Rest hinten.
@@ -544,6 +565,8 @@ def build_shopping_list(db: Session) -> dict:
     ordered = []
     for cat in sorted(groups.keys(), key=cat_sort_key):
         items = sorted(groups[cat], key=lambda x: (x["name"].lower(), (x["unit"] or "")))
+        if not items:
+            continue  # Warengruppe, in der alles mengenlos war -> kein leerer Block
         ordered.append({"category": cat, "items": items})
     return {"groups": ordered}
 
