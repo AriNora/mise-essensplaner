@@ -78,8 +78,14 @@ def get_or_create_ingredient(db: Session, name: str, category: Optional[str]) ->
         ing = models.Ingredient(name=name, category=category)
         db.add(ing)
         db.flush()  # vergibt ID, ohne Transaktion abzuschliessen
-    elif category and not ing.category:
-        ing.category = category  # Kategorie nachtragen, falls vorher leer
+    elif category and ing.category != category:
+        # Eine ausdruecklich gelieferte Kategorie hat Vorrang und aktualisiert die
+        # vorhandene (last-write-wins). Sonst bliebe eine einmal falsch gesetzte
+        # Warengruppe fuer immer haengen - z.B. "Tomaten", die zuerst als
+        # "Konserven & Vorrat" angelegt wurden. Verschiedene FORMEN (frisch vs.
+        # getrocknet/Dose) sollten weiterhin eigene Namen bekommen, damit sie sich
+        # nicht gegenseitig ueberschreiben.
+        ing.category = category
     return ing
 
 
