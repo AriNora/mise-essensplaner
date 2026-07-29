@@ -12,7 +12,15 @@ uploads/
 .DS_Store
 .idea/
 .vscode/
+Thumbs.db
 
 # Bring!-Zugangsdaten (nie committen)
 bring_account.json
 backend/bring_account.json
+
+# Umgebungsvariablen / Secrets
+.env
+
+# Uploads / generierte Dateien
+backend/app/uploads/
+uploads/
