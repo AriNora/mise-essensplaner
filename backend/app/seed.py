@@ -14,7 +14,10 @@ Zielgroesse von ~1000 Rezepten fluessig laufen.
 import argparse
 
 from .database import Base, SessionLocal, engine
+from sqlalchemy import inspect
+
 from . import crud, models, schemas
+from .pantry import seed_defaults as seed_pantry_defaults
 
 # --------------------------------------------------------------------------- #
 #  Kuratierte vegane Rezepte
@@ -36,8 +39,8 @@ RECIPES = [
         "instructions": "Zwiebel und Knoblauch anschwitzen, Gewürze kurz mitrösten, Linsen und Wasser zugeben und 20 Min köcheln. Spinat unterheben, mit Salz abschmecken.",
         "ingredients": [
             ("Rote Linsen", 200, "g", None, H),
-            ("Zwiebel", 1, "Stueck", "wuerfeln", G),
-            ("Knoblauchzehe", 2, "Stueck", "fein hacken", G),
+            ("Zwiebel", 1, "Stück", "würfeln", G),
+            ("Knoblauchzehe", 2, "Stück", "fein hacken", G),
             ("Blattspinat", 150, "g", "waschen", G),
             ("Kokosmilch", 200, "ml", None, KV),
             ("Currypulver", 1, "EL", None, GW),
@@ -57,48 +60,48 @@ RECIPES = [
             ("Kokosmilch", 200, "ml", None, KV),
             ("Knoblauchzehe", 2, "Stück", "fein hacken", G),
             ("Garam Masala", 1, "EL", None, GW),
-            ("Olivenoel", 2, "EL", None, OE),
+            ("Olivenöl", 2, "EL", None, OE),
         ],
     },
     {
         "name": "Pasta Arrabbiata",
         "servings": 2,
-        "instructions": "Knoblauch in Oel anbraten, Tomaten und Chili zugeben, 10 Min einkochen. Mit der gekochten Pasta mischen.",
+        "instructions": "Knoblauch in Öl anbraten, Tomaten und Chili zugeben, 10 Min einkochen. Mit der gekochten Pasta mischen.",
         "ingredients": [
             ("Spaghetti", 250, "g", None, GB),
             ("Gehackte Tomaten", 1, "Dose", None, KV),
-            ("Knoblauchzehe", 3, "Stueck", "in Scheiben schneiden", G),
-            ("Chilischote", 1, "Stueck", "fein hacken", G),
-            ("Olivenoel", 3, "EL", None, OE),
+            ("Knoblauchzehe", 3, "Stück", "in Scheiben schneiden", G),
+            ("Chilischote", 1, "Stück", "fein hacken", G),
+            ("Olivenöl", 3, "EL", None, OE),
             ("Basilikum", 1, "Bund", "zupfen", G),
             ("Salz", None, None, None, GW),
         ],
     },
     {
-        "name": "Gemuese-Stir-Fry mit Tofu",
+        "name": "Gemüse-Stir-Fry mit Tofu",
         "servings": 2,
-        "instructions": "Tofu knusprig braten, herausnehmen. Gemuese im Wok scharf anbraten, Sauce zugeben, Tofu zurueck in den Wok.",
+        "instructions": "Tofu knusprig braten, herausnehmen. Gemüse im Wok scharf anbraten, Sauce zugeben, Tofu zurück in den Wok.",
         "ingredients": [
-            ("Tofu natur", 200, "g", "wuerfeln", PT),
-            ("Brokkoli", 1, "Stueck", "in Roeschen teilen", G),
-            ("Karotte", 2, "Stueck", "in Stifte schneiden", G),
-            ("Paprika", 1, "Stueck", "in Streifen schneiden", G),
+            ("Tofu natur", 200, "g", "würfeln", PT),
+            ("Brokkoli", 1, "Stück", "in Röschen teilen", G),
+            ("Karotte", 2, "Stück", "in Stifte schneiden", G),
+            ("Paprika", 1, "Stück", "in Streifen schneiden", G),
             ("Sojasauce", 3, "EL", None, GW),
-            ("Sesamoel", 1, "EL", None, OE),
+            ("Sesamöl", 1, "EL", None, OE),
             ("Ingwer", 2, "cm", "reiben", G),
             ("Reis", 150, "g", None, GB),
         ],
     },
     {
-        "name": "Ofengemuese mit Hummus",
+        "name": "Ofengemüse mit Hummus",
         "servings": 2,
-        "instructions": "Gemuese mit Oel und Gewuerzen mischen, bei 200 Grad 30 Min backen. Mit Hummus servieren.",
+        "instructions": "Gemüse mit Öl und Gewürzen mischen, bei 200 Grad 30 Min backen. Mit Hummus servieren.",
         "ingredients": [
-            ("Suesskartoffel", 2, "Stueck", "wuerfeln", G),
-            ("Zucchini", 1, "Stueck", "in Scheiben schneiden", G),
-            ("Rote Zwiebel", 1, "Stueck", "in Spalten schneiden", G),
+            ("Süßkartoffel", 2, "Stück", "würfeln", G),
+            ("Zucchini", 1, "Stück", "in Scheiben schneiden", G),
+            ("Rote Zwiebel", 1, "Stück", "in Spalten schneiden", G),
             ("Kichererbsen", 1, "Dose", "abtropfen", H),
-            ("Olivenoel", 3, "EL", None, OE),
+            ("Olivenöl", 3, "EL", None, OE),
             ("Paprikapulver", 1, "TL", None, GW),
             ("Hummus", 150, "g", None, KV),
         ],
@@ -106,93 +109,93 @@ RECIPES = [
     {
         "name": "Haferflocken-Porridge mit Banane",
         "servings": 1,
-        "instructions": "Haferflocken mit Pflanzendrink aufkochen, 5 Min quellen lassen. Mit Banane und Nuessen toppen.",
+        "instructions": "Haferflocken mit Pflanzendrink aufkochen, 5 Min quellen lassen. Mit Banane und Nüssen toppen.",
         "ingredients": [
             ("Haferflocken", 60, "g", None, GB),
             ("Hafermilch", 250, "ml", None, PT),
-            ("Banane", 1, "Stueck", "in Scheiben schneiden", G),
-            ("Walnuesse", 20, "g", "grob hacken", NS),
+            ("Banane", 1, "Stück", "in Scheiben schneiden", G),
+            ("Walnüsse", 20, "g", "grob hacken", NS),
             ("Zimt", 1, "TL", None, GW),
         ],
     },
     {
         "name": "Tomaten-Linsen-Suppe",
         "servings": 3,
-        "instructions": "Zwiebel und Karotte anschwitzen, Linsen, Tomaten und Bruehe zugeben, 25 Min koecheln, pueriert oder stueckig servieren.",
+        "instructions": "Zwiebel und Karotte anschwitzen, Linsen, Tomaten und Brühe zugeben, 25 Min köcheln, püriert oder stückig servieren.",
         "ingredients": [
             ("Rote Linsen", 150, "g", None, H),
             ("Gehackte Tomaten", 1, "Dose", None, KV),
-            ("Zwiebel", 1, "Stueck", "wuerfeln", G),
-            ("Karotte", 2, "Stueck", "wuerfeln", G),
-            ("Gemuesebruehe", 750, "ml", None, KV),
-            ("Kreuzkuemmel", 1, "TL", None, GW),
-            ("Olivenoel", 1, "EL", None, OE),
+            ("Zwiebel", 1, "Stück", "würfeln", G),
+            ("Karotte", 2, "Stück", "würfeln", G),
+            ("Gemüsebrühe", 750, "ml", None, KV),
+            ("Kreuzkümmel", 1, "TL", None, GW),
+            ("Olivenöl", 1, "EL", None, OE),
         ],
     },
     {
         "name": "Falafel-Bowl",
         "servings": 2,
-        "instructions": "Falafel nach Packung zubereiten. Bowl mit Couscous, frischem Gemuese und Tahini-Dressing anrichten.",
+        "instructions": "Falafel nach Packung zubereiten. Bowl mit Couscous, frischem Gemüse und Tahini-Dressing anrichten.",
         "ingredients": [
-            ("Falafel", 8, "Stueck", None, KV),
+            ("Falafel", 8, "Stück", None, KV),
             ("Couscous", 150, "g", None, GB),
-            ("Gurke", 1, "Stueck", "wuerfeln", G),
+            ("Gurke", 1, "Stück", "würfeln", G),
             ("Cherrytomaten", 150, "g", "halbieren", G),
             ("Tahini", 2, "EL", None, KV),
-            ("Zitrone", 1, "Stueck", "auspressen", G),
+            ("Zitrone", 1, "Stück", "auspressen", G),
             ("Petersilie", 0.5, "Bund", "hacken", G),
         ],
     },
     {
         "name": "Erdnuss-Nudeln",
         "servings": 2,
-        "instructions": "Nudeln kochen. Sauce aus Erdnussmus, Sojasauce und Limette ruehren, mit Nudeln und Gemuese mischen.",
+        "instructions": "Nudeln kochen. Sauce aus Erdnussmus, Sojasauce und Limette rühren, mit Nudeln und Gemüse mischen.",
         "ingredients": [
             ("Reisnudeln", 200, "g", None, GB),
             ("Erdnussmus", 3, "EL", None, NS),
             ("Sojasauce", 2, "EL", None, GW),
-            ("Limette", 1, "Stueck", "auspressen", G),
-            ("Karotte", 1, "Stueck", "in Stifte schneiden", G),
-            ("Fruehlingszwiebel", 2, "Stueck", "in Ringe schneiden", G),
-            ("Erdnuesse", 20, "g", "grob hacken", NS),
+            ("Limette", 1, "Stück", "auspressen", G),
+            ("Karotte", 1, "Stück", "in Stifte schneiden", G),
+            ("Frühlingszwiebel", 2, "Stück", "in Ringe schneiden", G),
+            ("Erdnüsse", 20, "g", "grob hacken", NS),
         ],
     },
     {
         "name": "Pilz-Risotto",
         "servings": 2,
-        "instructions": "Zwiebel anschwitzen, Reis glasig duensten, nach und nach Bruehe zugeben. Gebratene Pilze unterheben.",
+        "instructions": "Zwiebel anschwitzen, Reis glasig dünsten, nach und nach Brühe zugeben. Gebratene Pilze unterheben.",
         "ingredients": [
             ("Risottoreis", 200, "g", None, GB),
             ("Champignons", 250, "g", "in Scheiben schneiden", G),
-            ("Zwiebel", 1, "Stueck", "fein wuerfeln", G),
-            ("Gemuesebruehe", 750, "ml", None, KV),
+            ("Zwiebel", 1, "Stück", "fein würfeln", G),
+            ("Gemüsebrühe", 750, "ml", None, KV),
             ("Hefeflocken", 2, "EL", None, GW),
-            ("Olivenoel", 2, "EL", None, OE),
+            ("Olivenöl", 2, "EL", None, OE),
         ],
     },
     {
         "name": "Chili sin Carne",
         "servings": 4,
-        "instructions": "Zwiebel und Paprika anbraten, Sojagranulat, Bohnen, Mais und Tomaten zugeben, mit Gewuerzen 20 Min schmoren.",
+        "instructions": "Zwiebel und Paprika anbraten, Sojagranulat, Bohnen, Mais und Tomaten zugeben, mit Gewürzen 20 Min schmoren.",
         "ingredients": [
             ("Kidneybohnen", 1, "Dose", "abtropfen", H),
             ("Mais", 1, "Dose", "abtropfen", KV),
             ("Gehackte Tomaten", 1, "Dose", None, KV),
             ("Sojagranulat", 80, "g", None, PT),
-            ("Zwiebel", 1, "Stueck", "wuerfeln", G),
-            ("Paprika", 1, "Stueck", "wuerfeln", G),
+            ("Zwiebel", 1, "Stück", "würfeln", G),
+            ("Paprika", 1, "Stück", "würfeln", G),
             ("Chilipulver", 1, "TL", None, GW),
-            ("Kreuzkuemmel", 1, "TL", None, GW),
+            ("Kreuzkümmel", 1, "TL", None, GW),
         ],
     },
     {
         "name": "Avocado-Toast",
         "servings": 1,
-        "instructions": "Brot toasten, Avocado zerdruecken, mit Zitrone, Salz und Chiliflocken wuerzen, auf das Brot streichen.",
+        "instructions": "Brot toasten, Avocado zerdrücken, mit Zitrone, Salz und Chiliflocken würzen, auf das Brot streichen.",
         "ingredients": [
             ("Vollkornbrot", 2, "Scheibe", None, GB),
-            ("Avocado", 1, "Stueck", "zerdruecken", G),
-            ("Zitrone", 0.5, "Stueck", "auspressen", G),
+            ("Avocado", 1, "Stück", "zerdrücken", G),
+            ("Zitrone", 0.5, "Stück", "auspressen", G),
             ("Chiliflocken", 1, "Prise", None, GW),
             ("Salz", None, None, None, GW),
         ],
@@ -201,8 +204,12 @@ RECIPES = [
 
 
 def seed_curated(db):
+    """Legt die kuratierten Rezepte an; schon vorhandene (gleicher Name) werden uebersprungen."""
     created = 0
+    vorhanden = {n.casefold() for (n,) in db.query(models.Recipe.name).all()}
     for r in RECIPES:
+        if r["name"].casefold() in vorhanden:
+            continue
         ingredients = [
             schemas.RecipeIngredientBase(
                 name=n, amount=a, unit=u, preparation=p, category=c
@@ -255,9 +262,13 @@ def main():
     parser.add_argument("--bulk", type=int, default=0, help="auf N Rezepte auffuellen")
     args = parser.parse_args()
 
+    # Wie in main.py: Vorrats-Startwerte nur eintragen, wenn die Tabelle neu entsteht.
+    pantry_is_new = "pantry_items" not in inspect(engine).get_table_names()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
+        if pantry_is_new:
+            seed_pantry_defaults(db)
         if args.reset:
             db.query(models.PlanEntry).delete()
             db.query(models.RecipeIngredient).delete()

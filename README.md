@@ -54,7 +54,7 @@ Zum Ausprobieren, im Ordner `backend` (virtuelle Umgebung aktiv):
 python -m app.seed
 ```
 
-Das legt einige Beispielrezepte an. Mit dem Zusatz `--reset` werden vorher **alle Rezepte,
+Das legt 12 Beispielrezepte an (ein zweiter Aufruf legt keine Doppelten an). Mit dem Zusatz `--reset` werden vorher **alle Rezepte,
 Zutaten und Wochenplan-Einträge gelöscht**, auch deine eigenen.
 
 ### Bring! einrichten (optional)
