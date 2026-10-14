@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas
+from .. import crud, prep, schemas, shopping
 from ..database import get_db
 
 router = APIRouter(prefix="/api/plan", tags=["plan"])
@@ -46,9 +46,9 @@ def clear_plan(db: Session = Depends(get_db)):
 
 @router.get("/shopping-list", response_model=schemas.ShoppingListResponse)
 def shopping_list(db: Session = Depends(get_db)):
-    return crud.build_shopping_list(db)
+    return shopping.build_shopping_list(db)
 
 
 @router.get("/prep-plan", response_model=schemas.PrepPlanResponse)
 def prep_plan(db: Session = Depends(get_db)):
-    return crud.build_prep_plan(db)
+    return prep.build_prep_plan(db)

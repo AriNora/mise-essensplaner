@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .. import bring, crud, schemas
+from .. import bring, schemas, shopping
 from ..database import get_db
 
 router = APIRouter(prefix="/api/bring", tags=["bring"])
@@ -42,7 +42,7 @@ def send(payload: Optional[schemas.BringSendRequest] = None, db: Session = Depen
     if payload is not None and payload.items is not None:
         items = [(it.name, _spec(it.amount, it.unit)) for it in payload.items]
     else:
-        data = crud.build_shopping_list(db)
+        data = shopping.build_shopping_list(db)
         items = [
             (item["name"], _spec(item["amount"], item.get("unit")))
             for group in data["groups"]

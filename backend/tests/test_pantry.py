@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app import crud, pantry, schemas
+from app import crud, pantry, schemas, shopping
 from app.database import Base
 
 
@@ -95,7 +95,7 @@ ZUTATEN = [
 def test_einkaufsliste_laesst_vorrat_aus_und_meldet_ihn(db):
     pantry.add_item(db, "Wasser"); pantry.add_item(db, "Salz"); pantry.add_item(db, "Pfeffer")
     _plan_with(db, ZUTATEN)
-    result = crud.build_shopping_list(db)
+    result = shopping.build_shopping_list(db)
     gekauft = {i["name"] for g in result["groups"] for i in g["items"]}
     assert gekauft == {"Zwiebel", "Cayennepfeffer"}
     assert {s["name"]: s["pantry"] for s in result["in_pantry"]} == {
@@ -106,7 +106,7 @@ def test_einkaufsliste_laesst_vorrat_aus_und_meldet_ihn(db):
 
 def test_einkaufsliste_ohne_vorrat_zeigt_wasser(db):
     _plan_with(db, ZUTATEN)
-    result = crud.build_shopping_list(db)
+    result = shopping.build_shopping_list(db)
     gekauft = {i["name"] for g in result["groups"] for i in g["items"]}
     assert {"kochendes Wasser", "Salz", "schwarzer Pfeffer"} <= gekauft
     assert result["in_pantry"] == []

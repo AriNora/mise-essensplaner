@@ -6,7 +6,8 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app import crud, schemas
+from app import crud, prep, schemas, shopping
+from app.units import canon_unit
 from app.database import Base
 
 
@@ -35,7 +36,7 @@ def plan(db, ingredients, base=2, portions=2, name="Testgericht"):
 
 def liste(db):
     """Einkaufsliste als flaches Dict {(name, einheit): menge}."""
-    result = crud.build_shopping_list(db)
+    result = shopping.build_shopping_list(db)
     return {(i["name"], i["unit"]): i["amount"] for g in result["groups"] for i in g["items"]}
 
 
@@ -52,14 +53,14 @@ def liste(db):
     ("Fantasieeinheit", "fantasieeinheit"),   # unbekannt: nur casefold, nichts geraten
 ])
 def test_canon_unit(roh, erwartet):
-    assert crud._canon_unit(roh) == erwartet
+    assert canon_unit(roh) == erwartet
 
 
 # --------------------------------------------------------------------------- #
 #  Zusammenfassen und Skalieren
 # --------------------------------------------------------------------------- #
 def test_leerer_plan_gibt_leere_liste(db):
-    assert crud.build_shopping_list(db) == {"groups": [], "in_pantry": []}
+    assert shopping.build_shopping_list(db) == {"groups": [], "in_pantry": []}
 
 
 def test_gleiche_zutat_aus_zwei_rezepten_wird_summiert(db):
@@ -151,14 +152,14 @@ def test_warengruppen_in_supermarkt_reihenfolge_und_sonstiges_am_ende(db):
         ("Mystery", 1, "Stück"),                    # ohne Kategorie
         ("Apfel", 1, "Stück", "Obst & Gemüse"),
     ])
-    gruppen = [g["category"] for g in crud.build_shopping_list(db)["groups"]]
+    gruppen = [g["category"] for g in shopping.build_shopping_list(db)["groups"]]
     assert gruppen == ["Obst & Gemüse", "Gewürze & Würze", "Sonstiges"]
 
 
 def test_kategorie_wird_von_spaeterem_rezept_nachgetragen(db):
     plan(db, [("Linsen", 100, "g")], name="A")                      # ohne Kategorie
     plan(db, [("Linsen", 100, "g", "Hülsenfrüchte")], name="B")
-    gruppen = crud.build_shopping_list(db)["groups"]
+    gruppen = shopping.build_shopping_list(db)["groups"]
     assert [g["category"] for g in gruppen] == ["Hülsenfrüchte"]
     assert gruppen[0]["items"][0]["amount"] == 200
 
@@ -179,7 +180,7 @@ def test_kategorie_wird_von_spaeterem_rezept_nachgetragen(db):
     ("unbekannt, optional", "unbekannt, optional"),
 ])
 def test_canon_prep(roh, erwartet):
-    assert crud._canon_prep(roh) == erwartet
+    assert prep._canon_prep(roh) == erwartet
 
 
 def test_vorbereitungsplan_fasst_varianten_zusammen(db):
@@ -189,7 +190,7 @@ def test_vorbereitungsplan_fasst_varianten_zusammen(db):
         schemas.RecipeIngredientBase(name="Zwiebel", amount=2, unit="Stück", preparation="hacken")]))
     for r in (recipe_a, recipe_b):
         crud.add_plan_entry(db, schemas.PlanEntryCreate(recipe_id=r.id, servings=2))
-    gruppen = crud.build_prep_plan(db)["groups"]
+    gruppen = prep.build_prep_plan(db)["groups"]
     assert len(gruppen) == 1
     assert gruppen[0]["preparation"] == "hacken"
     assert gruppen[0]["items"][0]["amount"] == 3
@@ -198,4 +199,4 @@ def test_vorbereitungsplan_fasst_varianten_zusammen(db):
 
 def test_vorbereitungsplan_ignoriert_zutaten_ohne_vorbereitung(db):
     plan(db, [("Reis", 100, "g")])
-    assert crud.build_prep_plan(db) == {"groups": []}
+    assert prep.build_prep_plan(db) == {"groups": []}

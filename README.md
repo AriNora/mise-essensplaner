@@ -91,7 +91,10 @@ backend/
 │   ├── main.py        # Einstieg, Datenbank-Start
 │   ├── models.py      # Tabellen
 │   ├── schemas.py     # API-Datenformate
-│   ├── crud.py        # Kernlogik (Einkaufsliste, Skalierung, Vorbereitung)
+│   ├── crud.py        # Datenbank-Zugriffe (Rezepte, Tags, Plan)
+│   ├── shopping.py    # Einkaufsliste (Zusammenfassen, Skalieren, Einheiten)
+│   ├── prep.py        # Vorbereitungsplan
+│   ├── units.py       # Einheiten-Schreibweisen, Umrechnung, Runden
 │   ├── pantry.py      # Vorrat und Abgleich mit der Einkaufsliste
 │   ├── normalize.py   # Zutatennamen vereinheitlichen (Zwiebel = Zwiebeln)
 │   ├── importer.py    # Rezept-Import (Link/Text)

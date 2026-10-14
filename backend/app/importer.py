@@ -13,25 +13,16 @@ Zutaten-Zeilen ("2 EL Olivenoel" -> Menge/Einheit/Zutat). Das uebernimmt
 """
 import json
 import re
-from typing import List, Optional
+from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
 
-# Bekannte Einheiten (klein, ohne Punkt) -> einheitliche Anzeigeform
-UNITS = {
-    "g": "g", "gramm": "g", "kg": "kg",
-    "ml": "ml", "l": "l", "liter": "l",
-    "el": "EL", "esslöffel": "EL", "essloeffel": "EL",
-    "tl": "TL", "teelöffel": "TL", "teeloeffel": "TL",
-    "stück": "Stück", "stueck": "Stück", "stk": "Stück",
-    "prise": "Prise", "prisen": "Prise",
-    "bund": "Bund", "dose": "Dose", "dosen": "Dose",
-    "zehe": "Zehe", "zehen": "Zehe",
-    "scheibe": "Scheibe", "scheiben": "Scheibe",
-    "päckchen": "Päckchen", "paeckchen": "Päckchen",
-    "tasse": "Tasse", "tassen": "Tasse", "cm": "cm",
-}
+from .units import UNIT_CANON
+
+# Bekannte Einheiten: gemeinsame Tabelle aus units.py. "gr" bleibt draussen, weil es
+# in Rezepttexten meist "gross" bedeutet ("1 gr. Zwiebel").
+UNITS = {k: v for k, v in UNIT_CANON.items() if k != "gr"}
 
 UNICODE_FRACTIONS = {"½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3, "⅛": 0.125}
 
@@ -69,10 +60,11 @@ def parse_ingredient_line(line: str) -> Optional[dict]:
 
     # Vorbereitung steht meist nach einem Komma ("1 Zwiebel, fein gewuerfelt")
     preparation = None
-    if "," in line:
-        head, tail = line.split(",", 1)
-        line = head.strip()
-        preparation = tail.strip() or None
+    # Ein Komma zwischen Ziffern ist ein Dezimalkomma ("1,5 l") und trennt nichts.
+    parts = re.split(r"(?<!\d),|,(?!\d)", line, maxsplit=1)
+    if len(parts) == 2:
+        line = parts[0].strip()
+        preparation = parts[1].strip() or None
 
     amount = None
     unit = None
