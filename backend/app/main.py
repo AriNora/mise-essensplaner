@@ -12,12 +12,16 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
 from sqlalchemy import inspect, text
 
-from .database import UPLOAD_DIR, Base, engine
-from .routers import bring, imports, ingredients, plan, recipes, tags
+from .database import UPLOAD_DIR, Base, SessionLocal, engine
+from .pantry import seed_defaults as seed_pantry_defaults
+from .routers import bring, imports, ingredients, pantry, plan, recipes, tags
 
-# Tabellen anlegen, falls noch nicht vorhanden.
+# Tabellen anlegen, falls noch nicht vorhanden. Ob der Vorrat neu ist, merken wir
+# uns vorher: nur dann werden einmalig die Startwerte eingetragen.
+pantry_is_new = "pantry_items" not in inspect(engine).get_table_names()
 Base.metadata.create_all(bind=engine)
 
 
@@ -36,6 +40,10 @@ def ensure_schema():
 
 ensure_schema()
 
+if pantry_is_new:
+    with SessionLocal() as _db:
+        seed_pantry_defaults(_db)
+
 app = FastAPI(title="Essensplaner", version="1.0")
 
 # API-Router
@@ -44,6 +52,7 @@ app.include_router(ingredients.router)
 app.include_router(plan.router)
 app.include_router(imports.router)
 app.include_router(tags.router)
+app.include_router(pantry.router)
 app.include_router(bring.router)
 
 # Hochgeladene Rezeptbilder unter /uploads ausliefern.
@@ -51,8 +60,22 @@ app.include_router(bring.router)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
+class NoCacheStaticFiles(StaticFiles):
+    """Frontend-Dateien mit `Cache-Control: no-cache` ausliefern.
+
+    Der Browser speichert die Dateien weiterhin, fragt aber vor jeder Nutzung
+    nach (ETag -> 304, falls unveraendert). Ohne den Header schaetzt er die
+    Gueltigkeit selbst und zeigt nach einem Update teils die alte app.js.
+    """
+
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Frontend: statische Dateien aus ../frontend ausliefern (html=True -> index.html
 # wird automatisch fuer / geliefert).
 FRONTEND_DIR = Path(__file__).resolve().parent.parent.parent / "frontend"
 if FRONTEND_DIR.exists():
-    app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    app.mount("/", NoCacheStaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")

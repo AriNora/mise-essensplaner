@@ -608,8 +608,9 @@ async function viewShopping() {
   if (data.groups.length === 0) {
     app.innerHTML = `<div class="page-head"><h1>Einkaufsliste</h1></div>
       <div class="empty"><div class="big">Noch nichts einzukaufen</div>
-      Plane zuerst ein paar Rezepte ein.
-      <div style="margin-top:1rem"><a class="btn btn-primary" href="#/recipes">Rezepte ansehen</a></div></div>`;
+      ${data.in_pantry && data.in_pantry.length ? "Alles, was du brauchst, ist im Vorrat." : "Plane zuerst ein paar Rezepte ein."}
+      <div style="margin-top:1rem"><a class="btn btn-primary" href="#/recipes">Rezepte ansehen</a></div></div>
+      ${inPantryBlock(data.in_pantry)}`;
     return;
   }
 
@@ -635,12 +636,13 @@ async function viewShopping() {
 
   app.innerHTML = `
     <div class="page-head"><div><h1>Einkaufsliste</h1>
-      <div class="sub">Hake ab, was du schon im Vorrat hast – an Bring! gehen nur die offenen Posten.</div></div>
+      <div class="sub">Hake ab, was du diesmal schon zu Hause hast – an Bring! gehen nur die offenen Posten. Dauerhaftes pflegst du unter „Vorrat“.</div></div>
       <div style="display:flex; gap:.5rem;">
         <button class="btn btn-primary" id="bring">An Bring! senden</button>
         <button class="btn" id="print">Drucken</button>
       </div></div>
     ${groups}
+    ${inPantryBlock(data.in_pantry)}
   `;
   document.getElementById("print").onclick = () => window.print();
 
@@ -674,6 +676,78 @@ async function viewShopping() {
   app.querySelectorAll(".check-list input").forEach((cb) => {
     cb.onchange = () => cb.closest("li").classList.toggle("done", cb.checked);
   });
+}
+
+/* ------------------------------- Vorrat ---------------------------- */
+// Eingeklappter Abschnitt unter der Einkaufsliste: was wegen des Vorrats fehlt.
+// So bleibt sichtbar, wenn der Abgleich eine Zutat zu Unrecht ausblendet.
+function inPantryBlock(list) {
+  if (!list || !list.length) return "";
+  return `<details class="card pantry-skipped">
+    <summary>Aus dem Vorrat (${list.length}) – steht nicht auf der Liste</summary>
+    <ul class="check-list">
+      ${list.map((i) => `<li><label>${esc(i.name)}</label><span class="amount">Vorrat: ${esc(i.pantry)}</span></li>`).join("")}
+    </ul>
+    <a href="#/pantry">Vorrat bearbeiten</a>
+  </details>`;
+}
+
+async function viewPantry() {
+  setActiveNav("pantry");
+  app.innerHTML = `
+    <div class="page-head"><div><h1>Vorrat</h1>
+      <div class="sub">Zutaten, die du immer da hast. Sie bleiben im Rezept stehen, kommen aber nie auf die Einkaufsliste.</div></div></div>
+    <form class="pantry-add" id="pantry-form">
+      <input class="search" id="pantry-input" list="dl-ingredients" maxlength="80"
+             placeholder="Zutat hinzufügen, z. B. Salz" autocomplete="off" />
+      <button class="btn btn-primary" type="submit">Hinzufügen</button>
+    </form>
+    <div class="chips" id="pantry-chips"></div>
+    <p class="kv pantry-hint">Ein Eintrag gilt für alle Formen am Wortende: „Wasser“ deckt auch „kochendes Wasser“
+      und „Wasser, lauwarm“. Zusammengesetzte Wörter wie „Meersalz“ oder „Sprudelwasser“ trägst du bei Bedarf einzeln ein.</p>
+  `;
+  const input = document.getElementById("pantry-input");
+  const chips = document.getElementById("pantry-chips");
+
+  async function load() {
+    const items = await api.listPantry();
+    chips.innerHTML = items.length
+      ? items.map((i) => `<button class="chip" data-id="${i.id}" title="Entfernen">${esc(i.name)}<span class="chip-x">×</span></button>`).join("")
+      : `<span class="kv">Noch nichts eingetragen.</span>`;
+    chips.querySelectorAll(".chip").forEach((btn) => {
+      btn.onclick = async () => {
+        try { await api.removePantryItem(btn.dataset.id); await load(); }
+        catch (e) { toast(e.message); }
+      };
+    });
+  }
+
+  // Vorschlaege aus den bekannten Zutaten (wie im Rezept-Editor).
+  let timer;
+  input.oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      try {
+        const ings = await api.listIngredients(input.value);
+        document.getElementById("dl-ingredients").innerHTML =
+          ings.map((i) => `<option value="${esc(i.name)}"></option>`).join("");
+      } catch (_) {}
+    }, 150);
+  };
+
+  document.getElementById("pantry-form").onsubmit = async (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      await api.addPantryItem(name);
+      input.value = "";
+      await load();
+    } catch (err) { toast(err.message); }
+    input.focus();
+  };
+
+  await load();
 }
 
 /* ------------------------- Vorbereitungsplan ----------------------- */
@@ -785,6 +859,7 @@ async function router() {
     else if (parts[0] === "plan") await viewPlan();
     else if (parts[0] === "shopping") await viewShopping();
     else if (parts[0] === "prep") await viewPrep();
+    else if (parts[0] === "pantry") await viewPantry();
     else { applyRecipesQuery(queryStr); await viewRecipes(); }
   } catch (e) {
     app.innerHTML = `<div class="empty"><div class="big">Etwas ist schiefgelaufen</div>${esc(e.message)}</div>`;

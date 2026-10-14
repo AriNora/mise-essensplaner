@@ -66,6 +66,11 @@ export const api = {
   shoppingList: () => request(`/api/plan/shopping-list`),
   prepPlan: () => request(`/api/plan/prep-plan`),
 
+  // Vorrat (Zutaten, die immer da sind und nie auf die Einkaufsliste kommen)
+  listPantry: () => request(`/api/pantry`),
+  addPantryItem: (name) => request(`/api/pantry`, { method: "POST", body: JSON.stringify({ name }) }),
+  removePantryItem: (id) => request(`/api/pantry/${id}`, { method: "DELETE" }),
+
   // Bring!-Anbindung
   bringStatus: () => request(`/api/bring/status`),
   sendToBring: (items) => request(`/api/bring/send`, { method: "POST", body: JSON.stringify({ items }) }),

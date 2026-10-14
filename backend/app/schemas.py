@@ -117,6 +117,23 @@ class PlanEntryOut(BaseModel):
     day: Optional[str] = None
 
 
+# ---------- Vorrat ----------
+class PantryItemIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
+
+
+class PantryItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+
+
+class PantrySkipped(BaseModel):
+    """Zutat aus dem Plan, die wegen des Vorrats nicht auf der Einkaufsliste steht."""
+    name: str
+    pantry: str   # welcher Vorrats-Eintrag sie abdeckt
+
+
 # ---------- Einkaufsliste ----------
 class ShoppingItem(BaseModel):
     name: str
@@ -132,6 +149,7 @@ class ShoppingGroup(BaseModel):
 
 class ShoppingListResponse(BaseModel):
     groups: List[ShoppingGroup]
+    in_pantry: List[PantrySkipped] = []   # hier NICHT gelistet, weil im Vorrat
 
 
 # ---------- Bring!-Versand ----------

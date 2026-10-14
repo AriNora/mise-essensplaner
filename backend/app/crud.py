@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from . import models, schemas
 from .database import UPLOAD_DIR
 from .normalize import ingredient_key
+from .pantry import find_pantry_match
 
 
 def _round(value: Optional[float]) -> Optional[float]:
@@ -393,20 +394,6 @@ CATEGORY_ORDER = [
 ]
 
 
-# Zutaten, von denen wir annehmen, dass sie immer im Vorrat sind -> sie landen
-# nie auf der Einkaufsliste. Hier ganz normal schreiben (Gross-/Kleinschreibung
-# und ss/ß egal) – die Liste wird unten per casefold() vereinheitlicht. Exakte
-# Namen -> kaufbares wie "Mineralwasser"/"Kokoswasser" bleibt unberuehrt.
-_PANTRY_STAPLES_RAW = [
-    "Wasser",
-    "Nudelwasser",
-    "heißes Wasser",
-    "kaltes Wasser",
-    "lauwarmes Wasser",
-]
-PANTRY_STAPLES = {s.casefold() for s in _PANTRY_STAPLES_RAW}
-
-
 # --------------------------------------------------------------------------- #
 #  Einheiten-Umrechnung fuer die Einkaufsliste (Schritt 3)
 # --------------------------------------------------------------------------- #
@@ -473,10 +460,12 @@ def build_shopping_list(db: Session) -> dict:
 
     Zutaten ohne Menge (z.B. "Salz, nach Geschmack") werden NICHT auf die Liste
     gesetzt - sie kommen aus dem Vorrat und wuerden die Liste nur aufblaehen.
-    Vorrats-Selbstverstaendlichkeiten (siehe PANTRY_STAPLES, z.B. Wasser) werden
-    ebenfalls komplett ausgelassen.
+    Zutaten aus dem Vorrat des Nutzers (siehe pantry.py, z.B. Wasser, Salz) werden
+    ebenfalls ausgelassen; sie stehen separat unter `in_pantry`.
     """
     entries = db.query(models.PlanEntry).join(models.Recipe).all()
+    pantry_items = db.query(models.PantryItem).all()
+    in_pantry: Dict[str, str] = {}   # Zutatenname -> deckender Vorrats-Eintrag
 
     # ------------------------------------------------------------------ #
     # 1) Beitraege pro Zutat sammeln. Pro Name trennen wir:
@@ -491,7 +480,9 @@ def build_shopping_list(db: Session) -> dict:
         for ri in recipe.ingredients:
             name = ri.ingredient.name
             nkey = " ".join(name.split()).casefold()
-            if nkey in PANTRY_STAPLES:
+            covered_by = find_pantry_match(name, pantry_items)
+            if covered_by is not None:
+                in_pantry.setdefault(name, covered_by)
                 continue  # immer im Vorrat -> nicht einkaufen
             acc = names.setdefault(nkey, {
                 "name": name,
@@ -577,7 +568,8 @@ def build_shopping_list(db: Session) -> dict:
         if not items:
             continue  # Warengruppe, in der alles mengenlos war -> kein leerer Block
         ordered.append({"category": cat, "items": items})
-    return {"groups": ordered}
+    skipped = [{"name": n, "pantry": p} for n, p in sorted(in_pantry.items(), key=lambda x: x[0].casefold())]
+    return {"groups": ordered, "in_pantry": skipped}
 
 
 # --------------------------------------------------------------------------- #

@@ -219,3 +219,13 @@ input::placeholder { color: #9aa098; }
 }
 .chip-add-ok { background: var(--herb); color: #fff; border-color: var(--herb); }
 .chip-add-ok:hover { border-color: var(--herb); }
+
+/* ------------------------------ Vorrat ------------------------------ */
+.pantry-add { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.pantry-add .search { flex: 1 1 220px; max-width: 360px; }
+.chip-x { margin-left: .4rem; color: var(--muted); }
+.chip:hover .chip-x { color: var(--danger); }
+.pantry-hint { margin-top: 1rem; max-width: 60ch; }
+.pantry-skipped { margin-top: 1.25rem; }
+.pantry-skipped summary { cursor: pointer; color: var(--muted); }
+.pantry-skipped a { font-size: .9rem; }

@@ -132,3 +132,19 @@ recipe_tags = Table(
     Column("recipe_id", Integer, ForeignKey("recipes.id", ondelete="CASCADE"), primary_key=True),
     Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
 )
+
+
+class PantryItem(Base):
+    """Eine Zutat, die immer im Vorrat ist (ohne Menge) und nie auf die Einkaufsliste kommt.
+
+    `key` ist der Vergleichsschluessel (siehe pantry.pantry_key); er haengt nicht
+    an der Tabelle `ingredients`. So kann man auch Zutaten eintragen, die noch in
+    keinem Rezept vorkommen, und das Zusammenfuehren von Zutaten laesst den Vorrat
+    unberuehrt.
+    """
+    __tablename__ = "pantry_items"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)                          # Anzeigename
+    key = Column(String, nullable=False, unique=True, index=True)  # Vergleichsschluessel
+    created_at = Column(DateTime, default=datetime.utcnow)
