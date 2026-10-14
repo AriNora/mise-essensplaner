@@ -1,56 +1,33 @@
 # Mise – Veganer Essensplaner
 
-Mise ist eine Full-Stack-Webapp zum Planen veganer Rezepte, zum automatischen
-Erstellen von Einkaufslisten und zum Verwalten eines eigenen Vorrats.
-Entstanden als Spielprojekt zum Vibe Coden mit Claude und aus persönlichem Wunsch nach einer solchen Lösung.
+Mise hilft dir, vegane Rezepte zu sammeln, eine Woche zu planen und daraus
+automatisch eine Einkaufsliste zu erstellen. Die App läuft auf deinem eigenen
+Computer; deine Daten bleiben bei dir.
 
-## Funktionen
+Entstanden als Projekt zum Vibe Coden mit Claude und aus persönlichem Wunsch
+nach einer solchen Lösung.
 
-- **Rezeptverwaltung** mit Zutaten, Mengen und Zubereitungsschritten
-- **Tag- und Filtersystem** über drei Facetten (Typ, Küche, Eigenschaft) mit
-  ODER-/UND-Verknüpfung und eigenen, nutzererstellbaren Tags
-- **Wochenplaner** zum Einplanen von Rezepten
-- **Einkaufsliste** mit automatischer Zusammenfassung gleicher Zutaten und
-  Einheiten-Umrechnung
-- **Vorratsverwaltung** – bereits vorhandene Zutaten werden berücksichtigt
-- **Rezept-Import** aus JSON-Bundles
+## Was kann Mise?
 
-## Tech-Stack
+- **Rezepte** mit Zutaten, Mengen und Schritten verwalten, suchen und nach
+  Gerichtstyp, Küche und Eigenschaften filtern (eigene Tags möglich)
+- **Rezepte importieren** – von einer Webseite (Link) oder aus eingefügtem Text.
+  Der Import füllt nur einen Entwurf vor; du prüfst ihn, bevor er gespeichert wird.
+- **Wochenplan** – Rezepte den Wochentagen zuordnen
+- **Einkaufsliste** – fasst gleiche Zutaten aller geplanten Rezepte zusammen
+  und rechnet Einheiten um
+- **Vorrat** – Zutaten, die du immer zu Hause hast (z. B. Salz, Wasser). Sie
+  bleiben im Rezept stehen, landen aber nie auf der Einkaufsliste. Die Liste
+  pflegst du selbst unter „Vorrat“.
+- **Vorbereitung** – Zutaten nach Arbeitsschritt gruppiert (z. B. alles
+  Gehackte zusammen)
+- **Bring!** (optional) – schickt die Einkaufsliste an die Einkaufs-App Bring!
 
-| Bereich   | Technologie                                   |
-|-----------|-----------------------------------------------|
-| Backend   | FastAPI, SQLAlchemy, Pydantic v2              |
-| Datenbank | SQLite                                        |
-| Frontend  | Vanilla-JavaScript Single-Page-App            |
+## Starten
 
-## Projektstruktur
+Du brauchst **Python 3.8 oder neuer**. Alles Weitere installiert sich selbst.
 
-```
-mise-essensplaner/
-├── backend/
-│   ├── app/
-│   │   ├── main.py          # FastAPI-Einstieg
-│   │   ├── models.py        # SQLAlchemy-Modelle
-│   │   ├── schemas.py       # Pydantic-Schemas
-│   │   ├── crud.py          # Datenbank-Logik
-│   │   ├── database.py      # DB-Verbindung
-│   │   └── routers/         # API-Endpunkte (recipes, ingredients, plan, tags, imports)
-│   ├── import_recipes-v3.py # Import-Skript für Rezept-Bundles
-│   ├── recipes-*.json       # Rezept-Bundles (Beispieldaten)
-│   └── requirements.txt
-└── frontend/
-    ├── index.html
-    └── js/
-        └── app.js
-```
-
-## Setup
-
-### Voraussetzungen
-
-- Python 3.8 oder neuer
-
-### Backend starten (Windows / PowerShell)
+Windows (PowerShell), im Projektordner:
 
 ```powershell
 cd backend
@@ -60,63 +37,83 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app
 ```
 
-Das Backend läuft anschließend unter **http://127.0.0.1:8000**.
-Die API-Dokumentation ist unter **http://127.0.0.1:8000/docs** erreichbar.
+Danach im Browser öffnen: **http://127.0.0.1:8000**
 
-> Hinweis: Die Datenbank `mealplanner.db` wird beim ersten Start automatisch
-> angelegt und ist bewusst nicht Teil des Repos. Jede:r startet also mit einer
-> leeren Datenbank.
+Beenden: im Terminal `Strg + C`. Beim nächsten Mal genügen die Zeilen
+`cd backend`, `.\.venv\Scripts\Activate.ps1` und `python -m uvicorn app.main:app`.
 
-### Frontend öffnen
+Beim ersten Start legt Mise die Datenbank `backend/mealplanner.db` selbst an.
+Sie ist zunächst leer (der Vorrat enthält nur Wasser, Nudelwasser, Salz und
+Pfeffer). Die Datenbank gehört dir und ist nicht Teil des Repos.
 
-Die Datei `frontend/index.html` im Browser öffnen.
+### Beispielrezepte laden (optional)
 
-### Rezepte importieren (optional)
-
-Um die leere Datenbank mit Beispielrezepten zu füllen, das Backend starten und
-in einem zweiten Terminal ein Bundle importieren:
+Zum Ausprobieren, im Ordner `backend` (virtuelle Umgebung aktiv):
 
 ```powershell
-cd backend
-.\.venv\Scripts\python.exe import_recipes-v3.py recipes-eisen-01.json
+python -m app.seed
 ```
 
-Weitere Bundles (`recipes-*.json`) können auf die gleiche Weise importiert
-werden. Das Import-Skript ist idempotent – ein erneuter Import legt keine
-Dubletten an.
+Das legt einige Beispielrezepte an. Mit dem Zusatz `--reset` werden vorher **alle Rezepte,
+Zutaten und Wochenplan-Einträge gelöscht**, auch deine eigenen.
 
-## Rezept-Bundles
+### Bring! einrichten (optional)
 
-Rezepte werden als JSON-Array eingelesen. Jedes Rezept hat folgende Struktur:
+Lege die Datei `backend/bring_account.json` an:
 
 ```json
-{
-  "name": "Rezeptname",
-  "servings": 4,
-  "source": "Creator – Seite – URL",
-  "instructions": "1. Schritt eins\n2. Schritt zwei",
-  "ingredients": [
-    {
-      "name": "Zutat",
-      "amount": 200,
-      "unit": "g",
-      "preparation": "gewürfelt",
-      "category": "Obst & Gemüse"
-    }
-  ],
-  "tags": [
-    { "kind": "typ", "name": "Hauptgericht" },
-    { "kind": "kueche", "name": "Italienisch" },
-    { "kind": "eigenschaft", "name": "Deftig" }
-  ]
-}
+{ "email": "deine@mail.de", "password": "dein-passwort", "list": "" }
 ```
 
-Gültige Kategorien: `Obst & Gemüse`, `Hülsenfrüchte`, `Getreide & Backwaren`,
-`Pflanzendrinks & Tofu`, `Nüsse & Samen`, `Öle & Essige`, `Gewürze & Würze`,
-`Konserven & Vorrat`, `Sonstiges`.
+`list` ist der Name deiner Bring!-Liste; leer = Standardliste. Die Datei bleibt
+lokal und ist von Git ausgeschlossen. Bring! bietet keine offizielle Schnittstelle,
+Mise nutzt die inoffizielle; sie kann sich künftig ändern.
 
-## Lizenz / Hinweis
+## Updates einspielen
 
-Entstanden als Spielprojekt zum Vibe Coden und aus persönlichem Wunsch nach einer solchen Lösung. 
-Alle Rezepte sollen mit Quellenangabe zum jeweiligen Urheber im Feld `source` versehen werden.
+Neue Version holen, dann Server neu starten (`Strg + C`, dann wieder
+`python -m uvicorn app.main:app`) und die Seite einmal mit `Strg + F5` neu laden.
+Deine Datenbank bleibt dabei erhalten.
+
+**Datenbank sichern:** Kopiere `backend/mealplanner.db`, solange der Server aus ist.
+
+## Für Entwickler
+
+| Bereich   | Technologie                                          |
+|-----------|------------------------------------------------------|
+| Backend   | FastAPI, SQLAlchemy 2, Pydantic v2                   |
+| Datenbank | SQLite (eine Datei, keine Einrichtung nötig)         |
+| Frontend  | Vanilla-JavaScript Single-Page-App, vom Backend mit ausgeliefert |
+
+```
+backend/
+├── app/
+│   ├── main.py        # Einstieg, Datenbank-Start
+│   ├── models.py      # Tabellen
+│   ├── schemas.py     # API-Datenformate
+│   ├── crud.py        # Kernlogik (Einkaufsliste, Skalierung, Vorbereitung)
+│   ├── pantry.py      # Vorrat und Abgleich mit der Einkaufsliste
+│   ├── normalize.py   # Zutatennamen vereinheitlichen (Zwiebel = Zwiebeln)
+│   ├── importer.py    # Rezept-Import (Link/Text)
+│   ├── bring.py       # Bring!-Anbindung
+│   ├── seed.py        # Beispieldaten
+│   ├── dedupe_ingredients.py  # Wartungsskript: doppelte Zutaten zusammenführen
+│   └── routers/       # API-Endpunkte unter /api
+├── tests/
+└── requirements.txt
+frontend/              # index.html, js/, css/
+```
+
+- API-Dokumentation bei laufendem Server: http://127.0.0.1:8000/docs
+- Tests (pytest ist nicht in `requirements.txt`):
+  `pip install pytest`, dann im Ordner `backend`: `python -m pytest`
+- Doppelte Zutaten prüfen: `python -m app.dedupe_ingredients` (nur Anzeige);
+  mit `--apply` ändert es die Datenbank und legt vorher eine Sicherung an.
+- Neue Tabellen entstehen automatisch beim Start. Für neue Spalten in bestehenden
+  Tabellen gibt es `ensure_schema()` in `main.py`; ein Migrationswerkzeug wie
+  Alembic wird bewusst nicht verwendet.
+
+## Hinweis
+
+Rezepte sollen mit Quellenangabe zum jeweiligen Urheber im Feld „Quelle“
+versehen werden.
