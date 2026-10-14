@@ -58,7 +58,7 @@ def parse_ingredient_line(line: str) -> Optional[dict]:
     if not line:
         return None
 
-    # Vorbereitung steht meist nach einem Komma ("1 Zwiebel, fein gewuerfelt")
+    # Vorbereitung steht meist nach einem Komma ("1 Zwiebel, fein gewürfelt")
     preparation = None
     # Ein Komma zwischen Ziffern ist ein Dezimalkomma ("1,5 l") und trennt nichts.
     parts = re.split(r"(?<!\d),|,(?!\d)", line, maxsplit=1)

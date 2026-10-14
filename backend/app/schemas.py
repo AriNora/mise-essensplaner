@@ -204,7 +204,7 @@ class PrepItem(BaseModel):
 
 
 class PrepGroup(BaseModel):
-    preparation: str                  # z.B. "wuerfeln"
+    preparation: str                  # z.B. "würfeln"
     items: List[PrepItem]
 
 

@@ -100,11 +100,11 @@ def build_prep_plan(db: Session) -> dict:
     """Gruppiert alle vorzubereitenden Zutaten nach Verarbeitungsart.
 
     Beispiel-Ergebnis:
-      "wuerfeln":  5 Zwiebeln (aus Curry, Suppe), 1 Paprika (aus Curry)
-      "schaelen":  4 Kartoffeln (aus Suppe)
+      "würfeln":  5 Zwiebeln (aus Curry, Suppe), 1 Paprika (aus Curry)
+      "schälen":  4 Kartoffeln (aus Suppe)
 
     Gleiche Zutat + Einheit innerhalb einer Verarbeitungsart wird summiert, damit
-    man z.B. alle Zwiebeln auf einmal wuerfeln kann.
+    man z.B. alle Zwiebeln auf einmal würfeln kann.
     """
     entries = db.query(models.PlanEntry).join(models.Recipe).all()
 

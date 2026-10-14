@@ -6,7 +6,7 @@ Drei zentrale Tabellen + eine Plan-Tabelle:
                         nach Warengruppen gruppierte Einkaufsliste.
   Recipe              - Rezept mit Basis-Portionszahl (servings).
   RecipeIngredient    - Verbindungstabelle: welche Zutat steckt in welchem Rezept,
-                        mit Menge, Einheit und Vorbereitung ("wuerfeln", "schaelen").
+                        mit Menge, Einheit und Vorbereitung ("würfeln", "schälen").
   PlanEntry           - ein eingeplantes Rezept fuer die Woche, mit gewuenschter
                         Portionszahl (kann von der Basis abweichen -> Skalierung).
 
@@ -92,7 +92,7 @@ class RecipeIngredient(Base):
 
     amount = Column(Float, nullable=True)        # z.B. 2  (nullable: "nach Geschmack")
     unit = Column(String, nullable=True)         # z.B. "g", "Stueck", "EL"
-    preparation = Column(String, nullable=True)  # z.B. "wuerfeln"
+    preparation = Column(String, nullable=True)  # z.B. "würfeln"
     position = Column(Integer, nullable=False, default=0)  # Reihenfolge im Rezept
 
     recipe = relationship("Recipe", back_populates="ingredients")

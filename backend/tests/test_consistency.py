@@ -56,3 +56,40 @@ def test_umrechenbare_einheiten_sind_kanonisch():
 
 def test_import_einheiten_stammen_aus_der_gemeinsamen_tabelle():
     assert set(UNITS.values()) <= set(UNIT_CANON.values())
+
+
+# --------------------------------------------------------------------------- #
+#  Vorschlagslisten im Editor (frontend/index.html)
+# --------------------------------------------------------------------------- #
+INDEX_HTML = APP_JS.parents[1] / "index.html"
+
+
+def datalist_options(list_id):
+    if not INDEX_HTML.exists():
+        pytest.skip("frontend/index.html nicht gefunden")
+    html = INDEX_HTML.read_text(encoding="utf-8")
+    m = re.search(r'<datalist id="' + list_id + r'">(.*?)</datalist>', html, re.S)
+    assert m, f"datalist {list_id} nicht gefunden"
+    return re.findall(r'<option value="([^"]*)"', m.group(1))
+
+
+@pytest.mark.parametrize("list_id", ["dl-preps", "dl-units"])
+def test_vorschlaege_ohne_umlaut_umschrift(list_id):
+    # "wuerfeln" statt "würfeln" waere ein eigener Wert im Vorbereitungsplan.
+    optionen = datalist_options(list_id)
+    assert optionen
+    for opt in optionen:
+        assert not re.search(r"ue|oe|ae", opt.lower()), f"Umlaut-Umschrift in Vorschlag: {opt}"
+
+
+def test_vorbereitungs_vorschlaege_sind_kanonisch():
+    # Waehlt jemand einen Vorschlag, darf der Vorbereitungsplan ihn nicht umbenennen.
+    from app.prep import _canon_prep
+    for opt in datalist_options("dl-preps"):
+        assert _canon_prep(opt) == opt, opt
+
+
+def test_einheiten_vorschlaege_sind_kanonisch():
+    for opt in datalist_options("dl-units"):
+        assert canon_unit(opt) == canon_unit(canon_unit(opt))
+        assert UNIT_CANON.get(opt.casefold(), opt) == opt, opt
