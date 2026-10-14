@@ -20,20 +20,20 @@ from . import crud, models, schemas
 #  Kuratierte vegane Rezepte
 #  Zutat: (Name, Menge, Einheit, Vorbereitung, Kategorie)
 # --------------------------------------------------------------------------- #
-G = "Obst & Gemuese"
-H = "Huelsenfruechte"
+G = "Obst & Gemüse"
+H = "Hülsenfrüchte"
 GB = "Getreide & Backwaren"
 PT = "Pflanzendrinks & Tofu"
-NS = "Nuesse & Samen"
-OE = "Oele & Essige"
-GW = "Gewuerze & Wuerze"
+NS = "Nüsse & Samen"
+OE = "Öle & Essige"
+GW = "Gewürze & Würze"
 KV = "Konserven & Vorrat"
 
 RECIPES = [
     {
         "name": "Linsen-Dal mit Spinat",
         "servings": 2,
-        "instructions": "Zwiebel und Knoblauch anschwitzen, Gewuerze kurz mitroesten, Linsen und Wasser zugeben und 20 Min koecheln. Spinat unterheben, mit Salz abschmecken.",
+        "instructions": "Zwiebel und Knoblauch anschwitzen, Gewürze kurz mitrösten, Linsen und Wasser zugeben und 20 Min köcheln. Spinat unterheben, mit Salz abschmecken.",
         "ingredients": [
             ("Rote Linsen", 200, "g", None, H),
             ("Zwiebel", 1, "Stueck", "wuerfeln", G),
@@ -48,14 +48,14 @@ RECIPES = [
     {
         "name": "Kichererbsen-Curry",
         "servings": 3,
-        "instructions": "Zwiebeln glasig duensten, Paprika zugeben, Tomaten und Kichererbsen einruehren, mit Gewuerzen 15 Min schmoren.",
+        "instructions": "Zwiebeln glasig dünsten, Paprika zugeben, Tomaten und Kichererbsen einrühren, mit Gewürzen 15 Min schmoren.",
         "ingredients": [
             ("Kichererbsen", 1, "Dose", "abtropfen", H),
-            ("Zwiebel", 2, "Stueck", "wuerfeln", G),
-            ("Paprika", 1, "Stueck", "in Streifen schneiden", G),
+            ("Zwiebel", 2, "Stück", "würfeln", G),
+            ("Paprika", 1, "Stück", "in Streifen schneiden", G),
             ("Gehackte Tomaten", 1, "Dose", None, KV),
             ("Kokosmilch", 200, "ml", None, KV),
-            ("Knoblauchzehe", 2, "Stueck", "fein hacken", G),
+            ("Knoblauchzehe", 2, "Stück", "fein hacken", G),
             ("Garam Masala", 1, "EL", None, GW),
             ("Olivenoel", 2, "EL", None, OE),
         ],
