@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .database import UPLOAD_DIR
+from .normalize import ingredient_key
 
 
 def _round(value: Optional[float]) -> Optional[float]:
@@ -61,17 +62,19 @@ def get_or_create_ingredient(db: Session, name: str, category: Optional[str]) ->
     vorhandene Zutaten mit grossem Umlaut am Anfang (Öl, Äpfel, ...) und wuerde
     sie erneut anlegen -> UNIQUE-Fehler beim Import. Darum:
       1) exakter Namensabgleich (trifft den Normalfall beim Import zuverlaessig),
-      2) Fallback: Unicode-korrekter, gross-/kleinschreibungsunabhaengiger
-         Vergleich in Python (casefold) ueber die vorhandenen Zutaten.
+      2) Fallback: gleiche Zutat in anderer Schreibweise (Gross-/Kleinschreibung,
+         Leerzeichen, Plural: 'Zwiebeln' -> vorhandene 'Zwiebel'), verglichen
+         ueber ingredient_key() aus normalize.py. So entstehen keine Dubletten,
+         die die Einkaufsliste als getrennte Zeilen fuehren wuerde.
     """
     name = name.strip()
     # 1) Exakter Treffer (schnell, dank UNIQUE-Index) - faengt auch Umlaut-Namen.
     ing = db.query(models.Ingredient).filter(models.Ingredient.name == name).first()
-    # 2) Fallback: gross-/kleinschreibungsunabhaengig, aber Unicode-korrekt.
+    # 2) Fallback: gleiche Zutat in anderer Schreibweise (siehe normalize.py).
     if ing is None:
-        folded = name.casefold()
+        key = ingredient_key(name)
         for cand in db.query(models.Ingredient).all():
-            if cand.name.casefold() == folded:
+            if ingredient_key(cand.name) == key:
                 ing = cand
                 break
     if ing is None:
