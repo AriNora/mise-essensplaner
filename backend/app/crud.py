@@ -105,7 +105,7 @@ def search_ingredients(db: Session, query: str, limit: int = 10) -> List[models.
 # --------------------------------------------------------------------------- #
 # Erlaubte Facetten in Anzeige-Reihenfolge. Tags mit anderem `kind` werden beim
 # Speichern ignoriert -> haelt die Daten sauber (kontrolliertes Vokabular).
-KIND_ORDER = ["typ", "kueche", "eigenschaft"]
+KIND_ORDER = list(schemas.TAG_KINDS)
 
 
 def get_or_create_tag(db: Session, kind: str, name: str) -> Optional[models.Tag]:

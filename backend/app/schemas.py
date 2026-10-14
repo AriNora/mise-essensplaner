@@ -7,7 +7,7 @@ bevor sie die Datenbank erreichen.
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------- Zutat im Rezept (Verbindungstabelle) ----------
@@ -30,9 +30,21 @@ class RecipeIngredientOut(BaseModel):
 
 
 # ---------- Schlagworte (Tags) ----------
+TAG_KINDS = ("typ", "kueche", "eigenschaft")
+WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+
 class TagIn(BaseModel):
     kind: str = Field(..., min_length=1)   # "typ" | "kueche" | "eigenschaft"
     name: str = Field(..., min_length=1)
+
+    @field_validator("kind")
+    @classmethod
+    def _check_kind(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v not in TAG_KINDS:
+            raise ValueError(f"Unbekannte Tag-Art; erlaubt: {', '.join(TAG_KINDS)}")
+        return v
 
 
 class TagOut(BaseModel):
@@ -96,15 +108,29 @@ class RecipeListResponse(BaseModel):
 
 
 # ---------- Plan ----------
+def _check_day(v: Optional[str]) -> Optional[str]:
+    """Wochentag: leer/None = kein Tag zugeordnet, sonst Mo..So."""
+    if v is None:
+        return None
+    v = v.strip().capitalize()
+    if v and v not in WEEKDAYS:
+        raise ValueError(f"Ungueltiger Wochentag; erlaubt: {', '.join(WEEKDAYS)} (oder leer)")
+    return v
+
+
 class PlanEntryCreate(BaseModel):
     recipe_id: int
     servings: int = Field(..., ge=1)
     day: Optional[str] = None
 
+    _day = field_validator("day")(_check_day)
+
 
 class PlanEntryUpdate(BaseModel):
     servings: Optional[int] = Field(None, ge=1)
     day: Optional[str] = None
+
+    _day = field_validator("day")(_check_day)
 
 
 class PlanEntryOut(BaseModel):

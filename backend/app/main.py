@@ -36,6 +36,10 @@ def ensure_schema():
     if "image" not in columns:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE recipes ADD COLUMN image VARCHAR"))
+    # Indizes, die spaeter im Modell dazukamen, in bestehenden Tabellen nachziehen.
+    for table in Base.metadata.tables.values():
+        for index in table.indexes:
+            index.create(bind=engine, checkfirst=True)
 
 
 ensure_schema()

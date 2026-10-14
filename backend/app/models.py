@@ -74,13 +74,21 @@ class Recipe(Base):
         order_by="Tag.name",
     )
 
+    # Eingeplante Eintraege verschwinden mit dem Rezept (sonst bleiben Waisen
+    # zurueck, die spaeter an einer wiederverwendeten ID haengen koennten).
+    plan_entries = relationship(
+        "PlanEntry",
+        back_populates="recipe",
+        cascade="all, delete-orphan",
+    )
+
 
 class RecipeIngredient(Base):
     __tablename__ = "recipe_ingredients"
 
     id = Column(Integer, primary_key=True)
-    recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
-    ingredient_id = Column(Integer, ForeignKey("ingredients.id"), nullable=False)
+    recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id"), nullable=False, index=True)
 
     amount = Column(Float, nullable=True)        # z.B. 2  (nullable: "nach Geschmack")
     unit = Column(String, nullable=True)         # z.B. "g", "Stueck", "EL"
@@ -96,12 +104,12 @@ class PlanEntry(Base):
     __tablename__ = "plan_entries"
 
     id = Column(Integer, primary_key=True)
-    recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False)
+    recipe_id = Column(Integer, ForeignKey("recipes.id", ondelete="CASCADE"), nullable=False, index=True)
     servings = Column(Integer, nullable=False)   # gewuenschte Portionen fuer DIESEN Slot
     day = Column(String, nullable=True)           # optional: "Mo".."So" fuer Wocheneinteilung
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    recipe = relationship("Recipe")
+    recipe = relationship("Recipe", back_populates="plan_entries")
 
 
 class Tag(Base):

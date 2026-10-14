@@ -35,6 +35,11 @@ def _register_unicode_functions(dbapi_connection, connection_record):
     """
     if not isinstance(dbapi_connection, sqlite3.Connection):
         return  # andere DBs (z.B. PostgreSQL) sind ohnehin Unicode-korrekt
+    # SQLite prueft Fremdschluessel nur auf Wunsch, und zwar pro Verbindung.
+    # Ohne das greifen "ON DELETE CASCADE" und Verweis-Pruefungen nicht.
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
     try:
         dbapi_connection.create_function("lower", 1, _unicode_lower, deterministic=True)
         dbapi_connection.create_function("upper", 1, _unicode_upper, deterministic=True)
