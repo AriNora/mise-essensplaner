@@ -11,9 +11,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app import crud
+from app import backup as backup_module, crud
 from app.database import Base, get_db
-from app.routers import bring, imports, ingredients, pantry, plan, recipes, tags
+from app.routers import backup as backup_router, bring, imports, ingredients, pantry, plan, recipes, tags
 
 
 @pytest.fixture()
@@ -36,9 +36,10 @@ def client(tmp_path, monkeypatch):
     # (zwei Stellen: das Router-Modul schreibt, crud.py loescht)
     monkeypatch.setattr(recipes, "UPLOAD_DIR", tmp_path)
     monkeypatch.setattr(crud, "UPLOAD_DIR", tmp_path)
+    monkeypatch.setattr(backup_module, "UPLOAD_DIR", tmp_path)
 
     app = FastAPI()
-    for module in (recipes, ingredients, plan, imports, tags, pantry, bring):
+    for module in (recipes, ingredients, plan, imports, tags, pantry, bring, backup_router):
         app.include_router(module.router)
     app.dependency_overrides[get_db] = override_get_db
 

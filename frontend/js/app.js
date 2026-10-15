@@ -164,7 +164,39 @@ async function viewRecipes() {
     <div class="filters" id="filters"></div>
     <ul class="recipe-list" id="recipe-list"></ul>
     <div class="pager" id="pager"></div>
+    <details class="backup-box" id="backup-box">
+      <summary>Sicherung</summary>
+      <p class="kv">Alle Rezepte, Bilder und der Vorrat in einer Datei – zum Aufbewahren oder für einen neuen Rechner.
+        Beim Einspielen wird nichts überschrieben: Rezepte mit gleichem Namen bleiben, wie sie sind.</p>
+      <div class="backup-actions">
+        <a class="btn" href="/api/backup" download>Alles sichern</a>
+        <button class="btn" type="button" id="restore-btn">Sicherung einspielen …</button>
+        <input type="file" id="restore-file" accept=".zip,application/zip" hidden />
+      </div>
+      <p class="kv" id="restore-msg" role="status"></p>
+    </details>
   `;
+  document.getElementById("restore-btn").onclick = () => document.getElementById("restore-file").click();
+  document.getElementById("restore-file").onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const msg = document.getElementById("restore-msg");
+    msg.textContent = "Sicherung wird eingespielt …";
+    try {
+      const r = await api.restoreBackup(file);
+      const parts = [`${r.recipes_added} Rezept(e) ergänzt`];
+      if (r.recipes_skipped) parts.push(`${r.recipes_skipped} schon vorhanden`);
+      if (r.images_added) parts.push(`${r.images_added} Bild(er)`);
+      if (r.pantry_added) parts.push(`${r.pantry_added} Vorrats-Eintrag/-Einträge`);
+      if (r.recipes_invalid.length) parts.push(`nicht lesbar: ${r.recipes_invalid.join(", ")}`);
+      msg.textContent = parts.join(" · ") + ".";
+      loadList();
+      api.listTags().then((data) => renderFilters(data.tags)).catch(() => {});
+    } catch (err) {
+      msg.textContent = err.message;
+    }
+  };
   document.getElementById("new-recipe").onclick = () => go("#/new");
   document.getElementById("import-recipe").onclick = () => go("#/import");
 

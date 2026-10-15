@@ -101,6 +101,10 @@ input::placeholder { color: #9aa098; }
 .recipe-row .title { font-weight: 600; }
 .recipe-row .meta { color: var(--muted); font-size: .85rem; }
 
+.backup-box { margin-top: 2rem; padding: .75rem 1rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
+.backup-box summary { cursor: pointer; font-weight: 600; }
+.backup-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .5rem 0; }
+a.btn { text-decoration: none; display: inline-block; }
 .pager { display: flex; gap: .5rem; align-items: center; justify-content: center; margin-top: 1.25rem; color: var(--muted); }
 
 /* ---------- Detail / Karten ---------- */

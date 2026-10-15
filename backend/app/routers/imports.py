@@ -28,6 +28,12 @@ def import_from_url(body: UrlIn):
         raise HTTPException(400, "Bitte eine vollständige Adresse angeben (mit http:// oder https://).")
     try:
         return importer.fetch_recipe_from_url(url)
+    except importer.UrlNotAllowed:
+        raise HTTPException(
+            400, "Diese Adresse kann nicht abgerufen werden. Erlaubt sind nur öffentliche Webseiten."
+        )
+    except importer.PageTooLarge:
+        raise HTTPException(422, "Die Seite ist zu groß für den Import.")
     except ValueError:
         raise HTTPException(
             422,

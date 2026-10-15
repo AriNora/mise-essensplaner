@@ -4,16 +4,20 @@ Zwei Quellen, ein gemeinsames Ziel: ein Rezept-Entwurf, der im Editor zur
 Kontrolle vorausgefuellt wird (es wird NICHTS automatisch gespeichert).
 
   1. Webseite  -> liest schema.org/Recipe aus dem JSON-LD im Quelltext
-                  (derselbe Industriestandard, den auch Bring! nutzt)
+                  (derselbe Industriestandard, den auch Bring! nutzt); fehlt
+                  das, die Rezeptkarte des Plugins "WP Recipe Maker"
   2. Text      -> zerlegt eingefuegte Zutaten-Zeilen
 
 Der schwierige Teil ist nicht das Beschaffen, sondern das Zerlegen der
 Zutaten-Zeilen ("2 EL Olivenoel" -> Menge/Einheit/Zutat). Das uebernimmt
 `parse_ingredient_line` mit einer Heuristik; der Rest wird im Editor korrigiert.
 """
+import ipaddress
 import json
 import re
+import socket
 from typing import Optional
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -45,6 +49,9 @@ def _amount_to_float(s: str) -> Optional[float]:
         return round(a / b, 2) if b else None
     if s in UNICODE_FRACTIONS:
         return round(UNICODE_FRACTIONS[s], 2)
+    m = re.match(r"^(\d+)\s*([½¼¾⅓⅔⅛])$", s)             # gemischt mit Unicode-Bruch: 5½
+    if m:
+        return round(int(m.group(1)) + UNICODE_FRACTIONS[m.group(2)], 2)
     try:
         return round(float(s.replace(",", ".")), 2)
     except ValueError:
@@ -181,13 +188,158 @@ def recipe_from_jsonld(html: str, source: Optional[str] = None) -> Optional[dict
     }
 
 
+# --------------------------------------------------------------------------- #
+#  WP Recipe Maker (Seiten ohne JSON-LD, z. B. Druckansichten)
+# --------------------------------------------------------------------------- #
+# Viele Food-Blogs nutzen das WordPress-Plugin "WP Recipe Maker". Seine Druck-
+# ansicht (/wprm_print/...) enthaelt kein JSON-LD, aber dieselbe Rezeptkarte mit
+# festen CSS-Klassen. Daran koennen wir Zutaten und Schritte direkt ablesen.
+# Die Seiten sind oft englisch; der Entwurf wird im Editor ohnehin kontrolliert.
+WPRM_UNITS = {
+    "tablespoon": "EL", "tablespoons": "EL", "tbsp": "EL", "tbsp.": "EL", "tbs": "EL",
+    "teaspoon": "TL", "teaspoons": "TL", "tsp": "TL", "tsp.": "TL",
+    "piece": "Stück", "pieces": "Stück", "pc": "Stück", "pcs": "Stück",
+    "clove": "Zehe", "cloves": "Zehe",
+    "cup": "Tasse", "cups": "Tasse",
+    "gram": "g", "grams": "g", "kilogram": "kg", "kilograms": "kg",
+    "milliliter": "ml", "milliliters": "ml", "liter": "l", "liters": "l", "litre": "l",
+    "pinch": "Prise", "pinches": "Prise", "bunch": "Bund", "sprig": "Zweig", "sprigs": "Zweig",
+    "slice": "Scheibe", "slices": "Scheibe", "can": "Dose", "cans": "Dose",
+}
+
+
+def _wprm_text(node) -> str:
+    if not node:
+        return ""
+    text = " ".join(node.get_text(" ", strip=True).split())
+    text = re.sub(r"\(\s+", "(", text)                 # "( Tipp" -> "(Tipp" (Tags trennen Woerter)
+    return re.sub(r"\s+([.,;:!?)])", r"\1", text)
+
+
+def recipe_from_wprm(html: str, source: Optional[str] = None) -> Optional[dict]:
+    """Liest eine WP-Recipe-Maker-Karte (CSS-Klassen `wprm-recipe-...`).
+    None, wenn die Seite keine solche Karte mit Zutaten enthaelt."""
+    soup = BeautifulSoup(html, "html.parser")
+    items = soup.select("li.wprm-recipe-ingredient")
+    if not items:
+        return None
+    # Nur die erste Rezeptkarte lesen (manche Seiten enthalten mehrere).
+    # (Druckansicht und normale Seite haben beide ein Element mit der Klasse "wprm-recipe".)
+    card = items[0].find_parent(class_="wprm-recipe") or soup
+    items = card.select("li.wprm-recipe-ingredient")
+
+    ingredients = []
+    for li in items:
+        name = _wprm_text(li.select_one(".wprm-recipe-ingredient-name"))
+        if not name:
+            continue
+        amount_text = _wprm_text(li.select_one(".wprm-recipe-ingredient-amount"))
+        unit_text = _wprm_text(li.select_one(".wprm-recipe-ingredient-unit"))
+        notes = _wprm_text(li.select_one(".wprm-recipe-ingredient-notes"))
+        amount = _amount_to_float(amount_text) if amount_text else None
+        if amount_text and amount is None:      # Menge nicht lesbar -> nicht verlieren
+            name = f"{amount_text} {unit_text} {name}".replace("  ", " ").strip()
+            unit_text = ""
+        key = unit_text.lower().strip(".")
+        unit = (UNITS.get(key) or WPRM_UNITS.get(key) or unit_text) or None
+        if notes.startswith("(") and notes.endswith(")"):
+            notes = notes[1:-1].strip()
+        ingredients.append({"name": name, "amount": amount, "unit": unit,
+                            "preparation": notes or None, "category": None})
+    if not ingredients:
+        return None
+
+    steps = [_wprm_text(t) for t in card.select("li.wprm-recipe-instruction .wprm-recipe-instruction-text")]
+    servings = card.select_one(".wprm-recipe-servings")
+    title = _wprm_text(card.select_one(".wprm-recipe-name")) or _wprm_text(soup.find("title"))
+    return {
+        "name": title or "Importiertes Rezept",
+        "servings": _yield_to_servings(_wprm_text(servings)),
+        "instructions": "\n".join(t for t in steps if t) or None,
+        "source": source,
+        "ingredients": ingredients,
+    }
+
+
+def recipe_from_html(html: str, source: Optional[str] = None) -> Optional[dict]:
+    """Erst JSON-LD (schema.org/Recipe), sonst die WP-Recipe-Maker-Karte."""
+    return recipe_from_jsonld(html, source) or recipe_from_wprm(html, source)
+
+
+class UrlNotAllowed(Exception):
+    """Die Adresse zeigt nicht auf eine oeffentliche Webseite (Schutz vor SSRF)."""
+
+
+class PageTooLarge(Exception):
+    """Die Antwort ist groesser als MAX_PAGE_BYTES."""
+
+
+MAX_PAGE_BYTES = 5 * 1024 * 1024
+MAX_REDIRECTS = 5
+ALLOWED_PORTS = {80, 443}
+
+
+def _check_public_url(url: str) -> None:
+    """Wirft UrlNotAllowed, wenn die Adresse nicht auf eine oeffentliche Webseite zeigt.
+
+    Erlaubt sind nur http/https auf den Standard-Ports und nur Rechner mit
+    oeffentlicher IP-Adresse. So kann der Import nicht genutzt werden, um Dienste
+    im eigenen Rechner oder Netzwerk abzufragen (z. B. http://localhost:8000/...,
+    Router-Oberflaechen, Cloud-Metadaten unter 169.254.169.254).
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise UrlNotAllowed("scheme")
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        raise UrlNotAllowed("port")
+    if port not in ALLOWED_PORTS:
+        raise UrlNotAllowed("port")
+    try:
+        infos = socket.getaddrinfo(parts.hostname, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise requests.ConnectionError("DNS")   # unbekannter Rechnername -> normaler Ladefehler
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0].split("%")[0])
+        if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        if not ip.is_global:
+            raise UrlNotAllowed("address")
+
+
+def _download(url: str) -> str:
+    """Laedt eine Seite; Weiterleitungen werden einzeln geprueft, die Groesse begrenzt."""
+    headers = {"User-Agent": "Mozilla/5.0 (Mise Essensplaner – Rezept-Import)"}
+    for _ in range(MAX_REDIRECTS + 1):
+        _check_public_url(url)
+        with requests.get(url, headers=headers, timeout=10,
+                          allow_redirects=False, stream=True) as resp:
+            if resp.is_redirect or resp.status_code in (301, 302, 303, 307, 308):
+                location = resp.headers.get("Location")
+                if not location:
+                    raise requests.ConnectionError("redirect")
+                url = urljoin(url, location)
+                continue
+            resp.raise_for_status()
+            declared = resp.headers.get("Content-Length")
+            if declared and declared.isdigit() and int(declared) > MAX_PAGE_BYTES:
+                raise PageTooLarge()
+            body = bytearray()
+            for chunk in resp.iter_content(64 * 1024):
+                body.extend(chunk)
+                if len(body) > MAX_PAGE_BYTES:
+                    raise PageTooLarge()
+            return bytes(body).decode(resp.encoding or resp.apparent_encoding or "utf-8",
+                                      errors="replace")
+    raise requests.TooManyRedirects()
+
+
 def fetch_recipe_from_url(url: str) -> dict:
     """Laedt die Seite und zieht das Rezept aus dem JSON-LD. Wirft ValueError,
-    wenn kein strukturiertes Rezept gefunden wird."""
-    headers = {"User-Agent": "Mozilla/5.0 (Mise Essensplaner – Rezept-Import)"}
-    resp = requests.get(url, headers=headers, timeout=10)
-    resp.raise_for_status()
-    draft = recipe_from_jsonld(resp.text, source=url)
+    wenn kein strukturiertes Rezept gefunden wird, UrlNotAllowed bei nicht
+    oeffentlichen Adressen und PageTooLarge bei uebergrossen Seiten."""
+    draft = recipe_from_html(_download(url), source=url)
     if draft is None:
         raise ValueError("no-recipe")
     return draft

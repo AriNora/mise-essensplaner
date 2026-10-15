@@ -71,6 +71,19 @@ export const api = {
   addPantryItem: (name) => request(`/api/pantry`, { method: "POST", body: JSON.stringify({ name }) }),
   removePantryItem: (id) => request(`/api/pantry/${id}`, { method: "DELETE" }),
 
+  // Sicherung: Download laeuft ueber einen normalen Link (/api/backup); Einspielen per Datei.
+  restoreBackup: async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`/api/backup/restore`, { method: "POST", body: fd });
+    if (!res.ok) {
+      let detail = "Einspielen fehlgeschlagen";
+      try { detail = (await res.json()).detail || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    return res.json();
+  },
+
   // Bring!-Anbindung
   bringStatus: () => request(`/api/bring/status`),
   sendToBring: (items) => request(`/api/bring/send`, { method: "POST", body: JSON.stringify({ items }) }),

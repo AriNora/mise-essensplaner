@@ -17,7 +17,7 @@ from sqlalchemy import inspect, text
 
 from .database import UPLOAD_DIR, Base, SessionLocal, engine
 from .pantry import seed_defaults as seed_pantry_defaults
-from .routers import bring, imports, ingredients, pantry, plan, recipes, tags
+from .routers import backup, bring, imports, ingredients, pantry, plan, recipes, tags
 
 # Tabellen anlegen, falls noch nicht vorhanden. Ob der Vorrat neu ist, merken wir
 # uns vorher: nur dann werden einmalig die Startwerte eingetragen.
@@ -58,6 +58,7 @@ app.include_router(imports.router)
 app.include_router(tags.router)
 app.include_router(pantry.router)
 app.include_router(bring.router)
+app.include_router(backup.router)
 
 # Hochgeladene Rezeptbilder unter /uploads ausliefern.
 # WICHTIG: vor dem "/"-Mount, da dieser als Catch-all alles abfaengt.
