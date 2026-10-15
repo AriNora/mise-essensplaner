@@ -98,5 +98,23 @@ def test_klammern_und_satzzeichen_ohne_stoerende_leerzeichen():
 
 
 def test_import_ueber_url_nutzt_die_karte(monkeypatch):
-    monkeypatch.setattr(importer, "_download", lambda url: PRINT_PAGE)
+    monkeypatch.setattr(importer, "_download", lambda url: (PRINT_PAGE, "test"))
     assert importer.fetch_recipe_from_url("https://blog.example/wprm_print/linsen")["name"] == "Rote Linsen"
+
+
+def test_kein_rezept_wird_im_serverprotokoll_erklaert(monkeypatch, caplog):
+    monkeypatch.setattr(importer, "_download",
+                        lambda url: ("<html><head><title>Bitte warten</title></head><body>Pruefung</body></html>", "HTTP 200"))
+    with caplog.at_level("WARNING", logger="uvicorn.error"):
+        with pytest.raises(ValueError):
+            importer.fetch_recipe_from_url("https://blog.example/x")
+    text = caplog.text
+    assert "JSON-LD-Bloecke: 0" in text and "WPRM-Zutaten: 0" in text and "Bitte warten" in text
+
+
+def test_unzen_aus_der_rezeptkarte_werden_zu_gramm():
+    html = ('<div class="wprm-recipe"><ul><li class="wprm-recipe-ingredient">'
+            '<span class="wprm-recipe-ingredient-amount">2</span> <span class="wprm-recipe-ingredient-unit">oz</span> '
+            '<span class="wprm-recipe-ingredient-name">Walnuts</span></li></ul></div>')
+    ing = recipe_from_wprm(html)["ingredients"][0]
+    assert (ing["amount"], ing["unit"]) == (57, "g")

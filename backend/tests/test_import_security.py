@@ -70,6 +70,8 @@ def net(monkeypatch):
 
     def get(url, **kwargs):
         assert kwargs.get("allow_redirects") is False   # Weiterleitungen pruefen wir selbst
+        for key, value in kwargs["headers"].items():     # echte HTTP-Kopfzeilen: nur Latin-1
+            value.encode("latin-1")
         Net.calls.append(url)
         return Net.routes[url]
 
@@ -163,7 +165,7 @@ def test_http_fehler_bleibt_ladefehler(net):
 
 def test_seite_ohne_rezept(net):
     net.routes["https://rezepte.example/x"] = FakeResponse(body="<html></html>")
-    with pytest.raises(ValueError):
+    with pytest.raises(importer.NoRecipeFound):
         importer.fetch_recipe_from_url("https://rezepte.example/x")
 
 
@@ -179,3 +181,17 @@ def test_api_meldet_zu_grosse_seite(client, net):
     r = client.post("/api/import/url", json={"url": "https://rezepte.example/x"})
     assert r.status_code == 422
     assert "zu groß" in r.json()["detail"]
+
+
+def test_user_agent_ist_latin1_tauglich():
+    """Regression: ein Gedankenstrich im User-Agent liess jeden echten Abruf mit einem
+    UnicodeEncodeError scheitern, der als 'kein Rezept gefunden' getarnt wurde."""
+    importer.USER_AGENT.encode("latin-1")
+
+
+def test_unerwarteter_fehler_wird_nicht_als_kein_rezept_getarnt(client, monkeypatch):
+    def boom(url):
+        raise UnicodeEncodeError("latin-1", "\u2013", 0, 1, "kaputt")
+    monkeypatch.setattr(importer, "fetch_recipe_from_url", boom)
+    with pytest.raises(UnicodeEncodeError):
+        client.post("/api/import/url", json={"url": "https://rezepte.example/x"})

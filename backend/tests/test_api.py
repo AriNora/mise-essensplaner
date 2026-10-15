@@ -334,7 +334,7 @@ def test_url_import_erfolg(client, monkeypatch):
 
 
 @pytest.mark.parametrize("error, status", [
-    (ValueError("no-recipe"), 422),
+    (importer.NoRecipeFound("keine Daten"), 422),
     (requests.ConnectionError("down"), 502),
 ])
 def test_url_import_fehler(client, monkeypatch, error, status):

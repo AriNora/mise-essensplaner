@@ -12,8 +12,10 @@ Der schwierige Teil ist nicht das Beschaffen, sondern das Zerlegen der
 Zutaten-Zeilen ("2 EL Olivenoel" -> Menge/Einheit/Zutat). Das uebernimmt
 `parse_ingredient_line` mit einer Heuristik; der Rest wird im Editor korrigiert.
 """
+import html as htmllib
 import ipaddress
 import json
+import logging
 import re
 import socket
 from typing import Optional
@@ -23,6 +25,9 @@ import requests
 from bs4 import BeautifulSoup
 
 from .units import UNIT_CANON
+
+# Meldungen erscheinen in der Konsole des Servers (Logger von uvicorn).
+log = logging.getLogger("uvicorn.error")
 
 # Bekannte Einheiten: gemeinsame Tabelle aus units.py. "gr" bleibt draussen, weil es
 # in Rezepttexten meist "gross" bedeutet ("1 gr. Zwiebel").
@@ -58,27 +63,47 @@ def _amount_to_float(s: str) -> Optional[float]:
         return None
 
 
+# US-Gewichte werden beim Import in Gramm umgerechnet (Mise rechnet metrisch).
+IMPERIAL_TO_METRIC = {
+    "oz": ("g", 28.349523125), "ounce": ("g", 28.349523125), "ounces": ("g", 28.349523125),
+}
+
+
+def _imperial_to_metric(amount: Optional[float], key: str):
+    """(Menge, Einheit) in Gramm, wenn `key` eine US-Gewichtseinheit ist, sonst None.
+    Auf ganze Gramm gerundet: 29,982 oz -> 850 g."""
+    if amount is None or key not in IMPERIAL_TO_METRIC:
+        return None
+    unit, factor = IMPERIAL_TO_METRIC[key]
+    return float(max(1, round(amount * factor))), unit
+
+
 def parse_ingredient_line(line: str) -> Optional[dict]:
     """Zerlegt eine Zutaten-Zeile in {name, amount, unit, preparation, category}."""
-    line = " ".join((line or "").strip().split())
+    line = " ".join(htmllib.unescape(line or "").strip().split())   # &amp; &#190; -> & ¾
     line = re.sub(r"^[-•*\u2022\u2013]\s*", "", line)  # Aufzaehlungszeichen weg
     if not line:
         return None
 
-    # Vorbereitung steht meist nach einem Komma ("1 Zwiebel, fein gewürfelt")
+    # Vorbereitung steht meist nach einem Komma ("1 Zwiebel, fein gewürfelt") ...
     preparation = None
+    # ... oder in doppelten Klammern am Ende ("1 Stueck Blumenkohl ((geputzt))", so schreibt
+    # WP Recipe Maker seine Hinweise ins JSON-LD).
+    m = re.match(r"^(.*?)\s*\(\((.*)\)\)$", line)
+    if m and m.group(1):
+        line, preparation = m.group(1), (m.group(2).strip() or None)
     # Ein Komma zwischen Ziffern ist ein Dezimalkomma ("1,5 l") und trennt nichts.
     parts = re.split(r"(?<!\d),|,(?!\d)", line, maxsplit=1)
     if len(parts) == 2:
         line = parts[0].strip()
-        preparation = parts[1].strip() or None
+        preparation = preparation or parts[1].strip() or None
 
     amount = None
     unit = None
     rest = line
 
     m = re.match(
-        r"^\s*(\d+\s*[-–]\s*\d+|\d+\s+\d+/\d+|\d+/\d+|[½¼¾⅓⅔⅛]|\d+(?:[.,]\d+)?)\s*(.*)$",
+        r"^\s*(\d+\s*[-–]\s*\d+|\d+\s+\d+/\d+|\d+/\d+|[½¼¾⅓⅔⅛]|\d+\s*[½¼¾⅓⅔⅛]|\d+(?:[.,]\d+)?)\s*(.*)$",
         line,
     )
     if m:
@@ -87,8 +112,13 @@ def parse_ingredient_line(line: str) -> Optional[dict]:
 
     # Falls direkt nach der Menge eine bekannte Einheit folgt
     parts = rest.split(" ", 1)
-    if parts and parts[0].lower().strip(".") in UNITS:
-        unit = UNITS[parts[0].lower().strip(".")]
+    key = parts[0].lower().strip(".") if parts else ""
+    metric = _imperial_to_metric(amount, key)
+    if metric:
+        amount, unit = metric
+        rest = parts[1] if len(parts) > 1 else ""
+    elif key in UNITS or (amount is not None and key in ENGLISH_UNITS):
+        unit = UNITS.get(key) or ENGLISH_UNITS[key]
         rest = parts[1] if len(parts) > 1 else ""
 
     name = rest.strip() or line
@@ -120,21 +150,26 @@ def _walk_for_recipe(node):
     return None
 
 
+def _collect_steps(node, out: list) -> None:
+    """Sammelt Schritte aus Text, Listen (auch verschachtelt) und HowTo-Objekten."""
+    if isinstance(node, str):
+        text = " ".join(htmllib.unescape(node).split())
+        if text:
+            out.append(text)
+    elif isinstance(node, list):
+        for item in node:
+            _collect_steps(item, out)
+    elif isinstance(node, dict):
+        if node.get("itemListElement"):                    # HowToSection: Unterschritte
+            _collect_steps(node["itemListElement"], out)
+        else:
+            _collect_steps(node.get("text") or node.get("name"), out)
+
+
 def _instructions_to_text(instr) -> Optional[str]:
-    if not instr:
-        return None
-    if isinstance(instr, str):
-        return instr.strip() or None
-    steps = []
-    if isinstance(instr, list):
-        for s in instr:
-            if isinstance(s, str):
-                steps.append(s.strip())
-            elif isinstance(s, dict):
-                txt = s.get("text") or s.get("name")
-                if txt:
-                    steps.append(str(txt).strip())
-    return "\n".join(p for p in steps if p) or None
+    steps: list = []
+    _collect_steps(instr, steps)
+    return "\n".join(steps) or None
 
 
 def _yield_to_servings(y) -> int:
@@ -144,6 +179,47 @@ def _yield_to_servings(y) -> int:
         return 2
     m = re.search(r"\d+", str(y))
     return int(m.group()) if m else 2
+
+
+_METRIC_RE = re.compile(r"^\(\s*(\d+(?:[.,]\d+)?)\s*(kg|g|ml|l)\s*\)$", re.IGNORECASE)
+
+
+def _page_metrics(soup) -> list:
+    """Metrische Klammer-Angaben aus dem sichtbaren HTML (Pick Up Limes): je Zutat
+    `(Menge, Einheit, Namenstext)` oder `(None, None, Namenstext)`, in Seitenreihenfolge.
+    Dort steht hinter der US-Angabe z. B. `<span class="ingredient-amount-metric-text-1">(850g)</span>`;
+    im JSON-LD derselben Seite fehlt sie."""
+    result = []
+    for box in soup.select(".ingredient-container"):
+        span = box.select_one('[class^="ingredient-amount-metric-text"]')
+        name = box.select_one(".ingredient-name-text")
+        m = _METRIC_RE.match(span.get_text(strip=True)) if span else None
+        amount = _amount_to_float(m.group(1)) if m else None
+        unit = m.group(2).lower() if m else None
+        result.append((amount, unit, name.get_text(" ", strip=True).lower() if name else ""))
+    return result
+
+
+def _apply_page_metrics(soup, rows: list) -> None:
+    """Ersetzt US-Mengen (cup, oz, EL/TL ...) durch die metrische Angabe der Seite.
+
+    Das JSON-LD kennt sie nicht, das HTML schon - beide Listen muessen aber dieselbe Reihenfolge
+    haben. Sicherung: nur bei gleicher Anzahl, und jede Zeile muss zum Namen im HTML passen
+    (Wortanfang), sonst bleibt alles unveraendert."""
+    metrics = _page_metrics(soup)
+    if not metrics or len(metrics) != len(rows) or not any(m[0] for m in metrics):
+        return
+    for (amount, unit, page_name), parsed in zip(metrics, rows):
+        if amount is None:
+            continue
+        if parsed is None or parsed["amount"] is None:
+            return
+        low = parsed["name"].lower()
+        if not any(len(w) >= 3 and w[:4] in low for w in page_name.split()):
+            return
+    for (amount, unit, _), parsed in zip(metrics, rows):
+        if amount is not None:
+            parsed["amount"], parsed["unit"] = amount, unit
 
 
 def recipe_from_jsonld(html: str, source: Optional[str] = None) -> Optional[dict]:
@@ -170,10 +246,13 @@ def recipe_from_jsonld(html: str, source: Optional[str] = None) -> Optional[dict
     if isinstance(raw_ings, str):
         raw_ings = [raw_ings]
     ingredients = []
+    rows = []                                   # je Zeile: Eintrag oder None (nicht lesbar)
     for line in raw_ings:
         parsed = parse_ingredient_line(str(line))
+        rows.append(parsed)
         if parsed:
             ingredients.append(parsed)
+    _apply_page_metrics(soup, rows)
 
     name = recipe.get("name") or "Importiertes Rezept"
     if isinstance(name, list):
@@ -195,7 +274,7 @@ def recipe_from_jsonld(html: str, source: Optional[str] = None) -> Optional[dict
 # ansicht (/wprm_print/...) enthaelt kein JSON-LD, aber dieselbe Rezeptkarte mit
 # festen CSS-Klassen. Daran koennen wir Zutaten und Schritte direkt ablesen.
 # Die Seiten sind oft englisch; der Entwurf wird im Editor ohnehin kontrolliert.
-WPRM_UNITS = {
+ENGLISH_UNITS = {
     "tablespoon": "EL", "tablespoons": "EL", "tbsp": "EL", "tbsp.": "EL", "tbs": "EL",
     "teaspoon": "TL", "teaspoons": "TL", "tsp": "TL", "tsp.": "TL",
     "piece": "Stück", "pieces": "Stück", "pc": "Stück", "pcs": "Stück",
@@ -241,7 +320,11 @@ def recipe_from_wprm(html: str, source: Optional[str] = None) -> Optional[dict]:
             name = f"{amount_text} {unit_text} {name}".replace("  ", " ").strip()
             unit_text = ""
         key = unit_text.lower().strip(".")
-        unit = (UNITS.get(key) or WPRM_UNITS.get(key) or unit_text) or None
+        metric = _imperial_to_metric(amount, key)
+        if metric:
+            amount, unit = metric
+        else:
+            unit = (UNITS.get(key) or ENGLISH_UNITS.get(key) or unit_text) or None
         if notes.startswith("(") and notes.endswith(")"):
             notes = notes[1:-1].strip()
         ingredients.append({"name": name, "amount": amount, "unit": unit,
@@ -268,6 +351,11 @@ def recipe_from_html(html: str, source: Optional[str] = None) -> Optional[dict]:
 
 class UrlNotAllowed(Exception):
     """Die Adresse zeigt nicht auf eine oeffentliche Webseite (Schutz vor SSRF)."""
+
+
+class NoRecipeFound(ValueError):
+    """Die Seite wurde geladen, enthaelt aber kein lesbares Rezept. Der Text beschreibt,
+    was auf der Seite gefunden wurde (nur zur Fehlersuche)."""
 
 
 class PageTooLarge(Exception):
@@ -308,9 +396,14 @@ def _check_public_url(url: str) -> None:
             raise UrlNotAllowed("address")
 
 
-def _download(url: str) -> str:
-    """Laedt eine Seite; Weiterleitungen werden einzeln geprueft, die Groesse begrenzt."""
-    headers = {"User-Agent": "Mozilla/5.0 (Mise Essensplaner – Rezept-Import)"}
+# HTTP-Kopfzeilen duerfen nur Latin-1 enthalten: KEIN Gedankenstrich/Umlaut im User-Agent!
+USER_AGENT = "Mozilla/5.0 (Mise Essensplaner - Rezept-Import)"
+
+
+def _download(url: str):
+    """Laedt eine Seite; Weiterleitungen werden einzeln geprueft, die Groesse begrenzt.
+    Liefert (Text, Abruf-Info) - die Info dient nur der Fehlersuche."""
+    headers = {"User-Agent": USER_AGENT}
     for _ in range(MAX_REDIRECTS + 1):
         _check_public_url(url)
         with requests.get(url, headers=headers, timeout=10,
@@ -330,8 +423,13 @@ def _download(url: str) -> str:
                 body.extend(chunk)
                 if len(body) > MAX_PAGE_BYTES:
                     raise PageTooLarge()
-            return bytes(body).decode(resp.encoding or resp.apparent_encoding or "utf-8",
+            info = "HTTP %s, %s, Encoding %s, %d Bytes, Server %s" % (
+                resp.status_code, resp.headers.get("Content-Type"),
+                resp.headers.get("Content-Encoding"), len(body), resp.headers.get("Server"))
+            log.info("Import-Abruf %s -> %s", url, info)
+            text = bytes(body).decode(resp.encoding or resp.apparent_encoding or "utf-8",
                                       errors="replace")
+            return text, info
     raise requests.TooManyRedirects()
 
 
@@ -339,9 +437,19 @@ def fetch_recipe_from_url(url: str) -> dict:
     """Laedt die Seite und zieht das Rezept aus dem JSON-LD. Wirft ValueError,
     wenn kein strukturiertes Rezept gefunden wird, UrlNotAllowed bei nicht
     oeffentlichen Adressen und PageTooLarge bei uebergrossen Seiten."""
-    draft = recipe_from_html(_download(url), source=url)
+    html, info = _download(url)
+    draft = recipe_from_html(html, source=url)
     if draft is None:
-        raise ValueError("no-recipe")
+        soup = BeautifulSoup(html, "html.parser")
+        detail = "%s | JSON-LD-Bloecke: %d, WPRM-Zutaten: %d, Titel: %r, Anfang: %r" % (
+            info,
+            len(soup.find_all("script", attrs={"type": "application/ld+json"})),
+            len(soup.select("li.wprm-recipe-ingredient")),
+            soup.title.get_text(strip=True)[:80] if soup.title else None,
+            " ".join(html[:200].split()),
+        )
+        log.warning("Import: kein Rezept in %s gefunden (%s)", url, detail)
+        raise NoRecipeFound(detail)
     return draft
 
 

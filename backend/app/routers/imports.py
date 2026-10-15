@@ -34,7 +34,8 @@ def import_from_url(body: UrlIn):
         )
     except importer.PageTooLarge:
         raise HTTPException(422, "Die Seite ist zu groß für den Import.")
-    except ValueError:
+    except importer.NoRecipeFound:
+        # Was auf der Seite gefunden wurde, steht im Server-Protokoll (siehe importer.py).
         raise HTTPException(
             422,
             "Auf dieser Seite wurde kein strukturiertes Rezept gefunden. "
